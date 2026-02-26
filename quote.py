@@ -183,18 +183,15 @@ if selected_country:
                             for _ in range(camp['nights']):
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
                                 
-                                # FETCH RATES
                                 s_rate = float(camp['df'][a_mask].iloc[0]["Single (Cost Per Person/Per Night)"]) if camp['s'] > 0 else 0
                                 d_rate = float(camp['df'][a_mask].iloc[0]["Double (Cost Per Person/Per Night)"]) if camp['d'] > 0 else 0
                                 t_rate = float(camp['df'][a_mask].iloc[0]["Triple (Cost Per Person/Per Night)"]) if camp['t'] > 0 else 0
                                 
-                                # CALC SUBTOTALS
                                 s_sub = camp['s'] * s_rate
                                 d_sub = (camp['d'] * 2) * d_rate
                                 t_sub = (camp['t'] * 3) * t_rate
                                 day_acc_cost = s_sub + d_sub + t_sub
                                 
-                                # PARK MATCHING
                                 p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & \
                                          (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
                                 p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
@@ -202,7 +199,6 @@ if selected_country:
                                 acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
                                 
-                                # BUILD DETAILED BREAKDOWN
                                 room_breakdown = []
                                 if camp['s'] > 0: room_breakdown.append(f"{camp['s']}S ({camp['s']} Pax x ${s_rate})")
                                 if camp['d'] > 0: room_breakdown.append(f"{camp['d']}D ({camp['d']*2} Pax x ${d_rate})")
@@ -213,19 +209,29 @@ if selected_country:
                                 park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults:,.2f}\n"
                                 calc_date += timedelta(days=1)
 
+                        # --- DETAILED VEHICLE CALCULATION ---
                         total_days = (travel_end - travel_start).days + 1
-                        total_veh_cost = float(df_veh.iloc[0]['Cost in USD/Per Day']) * total_days * num_vehicles
+                        veh_rate = float(df_veh.iloc[0]['Cost in USD/Per Day'])
+                        total_veh_cost = veh_rate * total_days * num_vehicles
+                        
+                        # Commission Calculation
                         comm_val = float(df_comm.iloc[0]['Commission Per Person (USD)'])
                         total_comm = comm_val * num_adults
+                        
                         grand_total = acc_total + park_total + total_veh_cost + total_comm + extra_charges
 
+                        # DISPLAY BREAKDOWN
                         st.subheader("Quotation Breakdown")
                         st.markdown("#### 1. Accommodation")
                         st.code(f"{acc_report}Subtotal: ${acc_total:,.2f}")
+                        
                         st.markdown("#### 2. Park Fees")
                         st.code(f"{park_report}Subtotal: ${park_total:,.2f}")
-                        st.markdown("#### 3. Vehicle & Extras")
-                        st.code(f"Vehicle: ${total_veh_cost:,.2f}\nCommission: {num_adults} Adults x ${comm_val} = ${total_comm:,.2f}\nAdditional: ${extra_charges:,.2f}")
+                        
+                        st.markdown("#### 3. Vehicle & Commission")
+                        veh_math = f"{num_vehicles} Vehicle(s) x {total_days} Days x ${veh_rate:,.2f} = ${total_veh_cost:,.2f}"
+                        comm_math = f"{num_adults} Adults x ${comm_val} = ${total_comm:,.2f}"
+                        st.code(f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional: ${extra_charges:,.2f}")
 
                         st.markdown(f"""
                             <div class="white-total-box">
