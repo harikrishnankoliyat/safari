@@ -21,6 +21,7 @@ st.markdown("""
         margin: 30px auto !important;
         width: 95% !important; 
         box-shadow: 0px 20px 50px rgba(0,0,0,0.2) !important;
+        display: block !important;
     }
     .total-title-text {
         color: #000000 !important;
@@ -46,7 +47,6 @@ st.markdown("""
 
 # --- UTILITY FUNCTIONS ---
 def get_available_countries():
-    """Scans directory for .xlsx files and ignores temporary Excel owner files."""
     return sorted([f.replace('.xlsx', '') for f in os.listdir('.') 
                    if f.endswith('.xlsx') and not f.startswith('~$')])
 
@@ -58,7 +58,6 @@ def load_country_data(country_name):
     df_park = pd.read_excel(xls, 'Park Fees')
     df_comm = pd.read_excel(xls, 'Jaws Africa Commission')
     df_veh = pd.read_excel(xls, 'Vehicle Cost')
-    
     for df, start, end in [(df_acc, 'Date From', 'Date To'), (df_park, 'Dates From', 'Dates To')]:
         df[start] = pd.to_datetime(df[start])
         df[end] = pd.to_datetime(df[end])
@@ -66,25 +65,18 @@ def load_country_data(country_name):
 
 st.title("🦁 Jaws Africa Safari Planner")
 
-# --- 1. COUNTRY SELECTION ---
 available_countries = get_available_countries()
 if not available_countries:
-    st.error("No Excel files found. Please upload files like 'Kenya.xlsx'.")
+    st.error("No Excel files found.")
     st.stop()
 
-selected_country = st.selectbox(
-    "1. Select Destination Country", 
-    options=available_countries, 
-    index=None, 
-    placeholder="Select a Country"
-)
+selected_country = st.selectbox("1. Select Destination Country", options=available_countries, index=None, placeholder="Select a Country")
 
 if selected_country:
     data = load_country_data(selected_country)
     if data:
         df_acc, df_park, df_comm, df_veh = data
 
-        # --- 2. PARK SELECTION ---
         st.subheader("2. Select Parks/Locations")
         all_parks = sorted(df_acc['Location'].unique().tolist())
         selected_parks = []
@@ -94,34 +86,28 @@ if selected_country:
                 selected_parks.append(park)
 
         if not selected_parks:
-            st.warning("⚠️ Please select at least one destination/park to proceed.")
+            st.warning("⚠️ Please select at least one park.")
         else:
             st.divider()
             col_a, col_b = st.columns(2)
             
             with col_a:
                 st.subheader("3. Travelers & Dates")
-                num_adults = st.number_input("Number of Adults", min_value=1, value=2)
-                travel_start = st.date_input("Travel Start Date", value=datetime(2026, 6, 14))
-                travel_end = st.date_input("Travel End Date", value=datetime(2026, 6, 20))
-                
-                if travel_end < travel_start:
-                    st.error("❌ Error: End date cannot be before the start date.")
-                    total_days, total_nights = 0, 0
-                else:
-                    total_days = (travel_end - travel_start).days + 1
-                    total_nights = max(0, total_days - 1)
-                    st.info(f"Trip Duration: {total_days} Days / {total_nights} Nights")
+                num_adults = st.number_input("Total Number of Adults", min_value=1, value=2)
+                travel_start = st.date_input("Start Date", value=datetime(2026, 6, 14))
+                travel_end = st.date_input("End Date", value=datetime(2026, 6, 20))
+                total_days = (travel_end - travel_start).days + 1
+                total_nights = max(0, total_days - 1)
+                st.info(f"Trip Duration: {total_days} Days / {total_nights} Nights")
 
             with col_b:
                 st.subheader("4. Vehicle Requirements")
                 min_veh = math.ceil(num_adults / 6)
                 num_vehicles = st.number_input("Number of Vehicles", min_value=1, value=max(1, min_veh))
                 if num_vehicles < min_veh:
-                    st.warning(f"⚠️ Minimum {min_veh} vehicles required for {num_adults} adults.")
-                
+                    st.warning(f"⚠️ Minimum {min_veh} vehicles required.")
 
-            st.subheader("5. Accommodation Planning")
+            st.subheader("5. Accommodation & Room Configuration")
             if 'camps_count' not in st.session_state: st.session_state.camps_count = 1
             
             planned_nights, camp_data = 0, []
@@ -134,40 +120,49 @@ if selected_country:
                         loc = st.selectbox("Location", selected_parks, key=f"loc_{i}")
                         loc_df = df_acc[df_acc['Location'] == loc]
                     with c2:
-                        acc_type = st.selectbox("Type", sorted(loc_df['Room Type'].unique()), key=f"type_{i}")
+                        acc_type = st.selectbox("Room Type", sorted(loc_df['Room Type'].unique()), key=f"type_{i}")
                         type_df = loc_df[loc_df['Room Type'] == acc_type]
                     with c3:
                         prop = st.selectbox("Property", sorted(type_df['Property'].unique()), key=f"prop_{i}")
                         prop_df = type_df[type_df['Property'] == prop]
 
-                    c4, c5 = st.columns(2)
-                    with c4:
-                        occ_opts = [o for o in ["Single", "Double", "Triple"] if not prop_df[f"{o} (Cost Per Person/Per Night)"].isnull().all()]
-                        occupancy = st.selectbox("Occupancy", occ_opts, key=f"occ_{i}")
-                    with c5:
-                        rem_n = total_nights - planned_nights
-                        nights = st.number_input("Nights", min_value=1, max_value=max(1, rem_n), value=min(1, rem_n) if rem_n > 0 else 1, key=f"nights_{i}")
+                    # ROOM CONFIGURATION TOOL
+                    st.markdown("**Select Room Quantities:**")
+                    rc1, rc2, rc3, rc4 = st.columns(4)
+                    with rc1: s_rooms = st.number_input("Single Rooms", min_value=0, step=1, key=f"s_{i}")
+                    with rc2: d_rooms = st.number_input("Double Rooms", min_value=0, step=1, key=f"d_{i}")
+                    with rc3: t_rooms = st.number_input("Triple Rooms", min_value=0, step=1, key=f"t_{i}")
                     
+                    total_pax_in_rooms = (s_rooms * 1) + (d_rooms * 2) + (t_rooms * 3)
+                    with rc4:
+                        nights = st.number_input("Nights", min_value=1, max_value=max(1, total_nights - planned_nights), key=f"n_{i}")
+
+                    if total_pax_in_rooms != num_adults:
+                        st.error(f"⚠️ Room pax ({total_pax_in_rooms}) must match Total Adults ({num_adults})")
+                    else:
+                        st.success(f"✅ Configuration valid for {num_adults} adults.")
+
                     planned_nights += nights
                     st.markdown('</div>', unsafe_allow_html=True)
-                    camp_data.append({"prop": prop, "loc": loc, "occ": occupancy, "nights": nights, "df": prop_df})
+                    camp_data.append({
+                        "prop": prop, "loc": loc, "nights": nights, "df": prop_df,
+                        "s": s_rooms, "d": d_rooms, "t": t_rooms, "valid": (total_pax_in_rooms == num_adults)
+                    })
 
             if planned_nights < total_nights:
-                st.warning(f"⚠️ {total_nights - planned_nights} nights remaining.")
                 if st.button("➕ Add More Camps"):
                     st.session_state.camps_count += 1
                     st.rerun()
-            elif planned_nights == total_nights:
-                st.success("✅ All nights are allotted.")
 
             st.divider()
             extra_charges = st.number_input("Additional Charges ($)", value=0.0)
 
             if st.button("🚀 GENERATE CALCULATION", type="primary"):
-                if travel_end < travel_start:
-                    st.error("Fix the travel dates.")
+                all_valid = all([c['valid'] for c in camp_data])
+                if not all_valid:
+                    st.error("Please fix room configurations to match total adults.")
                 elif planned_nights != total_nights:
-                    st.error(f"Allocate exactly {total_nights} nights.")
+                    st.error(f"Please allocate all {total_nights} nights.")
                 else:
                     try:
                         acc_total, park_total = 0.0, 0.0
@@ -175,42 +170,40 @@ if selected_country:
                         calc_date = pd.to_datetime(travel_start)
                         
                         for camp in camp_data:
-                            occ_col = f"{camp['occ']} (Cost Per Person/Per Night)"
                             for _ in range(camp['nights']):
-                                # 1. ACC MATCHING
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
-                                a_rate = float(camp['df'][a_mask].iloc[0][occ_col])
                                 
-                                # 2. PARK MATCHING (FIXED OPERATOR)
-                                p_mask = (df_park['Location'] == camp['loc']) & \
-                                         (df_park['Dates From'] <= calc_date) & \
-                                         (df_park['Dates To'] >= calc_date) & \
-                                         (df_park['Travellers  Category'] == 'Adult')
+                                # FETCH INDIVIDUAL RATES
+                                s_rate = float(camp['df'][a_mask].iloc[0]["Single (Cost Per Person/Per Night)"]) if camp['s'] > 0 else 0
+                                d_rate = float(camp['df'][a_mask].iloc[0]["Double (Cost Per Person/Per Night)"]) if camp['d'] > 0 else 0
+                                t_rate = float(camp['df'][a_mask].iloc[0]["Triple (Cost Per Person/Per Night)"]) if camp['t'] > 0 else 0
                                 
+                                day_acc_cost = (camp['s'] * s_rate) + (camp['d'] * 2 * d_rate) + (camp['t'] * 3 * t_rate)
+                                
+                                # PARK MATCHING
+                                p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & \
+                                         (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
                                 p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
                                 
-                                acc_total += (a_rate * num_adults)
+                                acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
-                                acc_report += f"{calc_date.date()} | {camp['prop'][:15]} | {num_adults} Pax x ${a_rate} = ${a_rate*num_adults}\n"
+                                
+                                acc_report += f"{calc_date.date()} | {camp['prop'][:10]} | {camp['s']}S, {camp['d']}D, {camp['t']}T = ${day_acc_cost}\n"
                                 park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults}\n"
                                 calc_date += timedelta(days=1)
 
                         veh_rate = float(df_veh.iloc[0]['Cost in USD/Per Day'])
                         total_veh_cost = veh_rate * total_days * num_vehicles
-                        
-                        comm_val = float(df_comm.iloc[0]['Commission Per Person (USD)'])
-                        total_comm = comm_val * num_adults
+                        total_comm = float(df_comm.iloc[0]['Commission Per Person (USD)']) * num_adults
                         grand_total = acc_total + park_total + total_veh_cost + total_comm + extra_charges
 
-                        st.subheader("Final Quotation Breakdown")
+                        st.subheader("Quotation Breakdown")
                         st.markdown("#### 1. Accommodation")
                         st.code(f"{acc_report}Subtotal: ${acc_total:,.2f}")
                         st.markdown("#### 2. Park Fees")
                         st.code(f"{park_report}Subtotal: ${park_total:,.2f}")
-                        st.markdown("#### 3. Vehicle Hire")
-                        st.code(f"{num_vehicles} Vehicle(s) x {total_days} Days x ${veh_rate:,.2f} = ${total_veh_cost:,.2f}")
-                        st.markdown("#### 4. Commission & Extras")
-                        st.code(f"Commission: {num_adults} Adults x ${comm_val} = ${total_comm:,.2f}\nAdditional: ${extra_charges:,.2f}")
+                        st.markdown("#### 3. Vehicle & Commission")
+                        st.code(f"Vehicle: ${total_veh_cost:,.2f}\nCommission: ${total_comm:,.2f}")
 
                         st.markdown(f"""
                             <div class="white-total-box">
@@ -219,6 +212,4 @@ if selected_country:
                             </div>
                         """, unsafe_allow_html=True)
                     except Exception as e:
-                        st.error(f"Error: {e}. Ensure {selected_country}.xlsx has rates for all chosen dates/parks.")
-else:
-    st.info("👈 Please select a country to begin.")
+                        st.error(f"Error: {e}")
