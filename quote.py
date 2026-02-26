@@ -20,7 +20,7 @@ st.markdown("""
         text-align: center !important;
         margin: 30px auto !important;
         width: 95% !important; 
-        box-shadow: 0px 20px 50px rgba(0,0,0,0.2) !important;
+        box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
         display: block !important;
     }
     .total-title-text {
@@ -141,7 +141,6 @@ if selected_country:
                     
                     total_pax_in_rooms = (s_rooms * 1) + (d_rooms * 2) + (t_rooms * 3)
                     with rc4:
-                        # NIGHT VALIDATION
                         rem_n = total_nights - planned_nights
                         nights = st.number_input("Nights", min_value=1, max_value=max(1, rem_n), value=min(1, rem_n) if rem_n > 0 else 1, key=f"n_{i}")
 
@@ -157,7 +156,6 @@ if selected_country:
                         "s": s_rooms, "d": d_rooms, "t": t_rooms, "valid": (total_pax_in_rooms == num_adults)
                     })
 
-            # NIGHT WARNINGS & ADD BUTTON
             if planned_nights < total_nights:
                 st.warning(f"⚠️ {total_nights - planned_nights} nights remaining.")
                 if st.button("➕ Add More Camps"):
@@ -184,19 +182,35 @@ if selected_country:
                         for camp in camp_data:
                             for _ in range(camp['nights']):
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
+                                
+                                # FETCH RATES
                                 s_rate = float(camp['df'][a_mask].iloc[0]["Single (Cost Per Person/Per Night)"]) if camp['s'] > 0 else 0
                                 d_rate = float(camp['df'][a_mask].iloc[0]["Double (Cost Per Person/Per Night)"]) if camp['d'] > 0 else 0
                                 t_rate = float(camp['df'][a_mask].iloc[0]["Triple (Cost Per Person/Per Night)"]) if camp['t'] > 0 else 0
-                                day_acc_cost = (camp['s'] * s_rate) + (camp['d'] * 2 * d_rate) + (camp['t'] * 3 * t_rate)
                                 
+                                # CALC SUBTOTALS
+                                s_sub = camp['s'] * s_rate
+                                d_sub = (camp['d'] * 2) * d_rate
+                                t_sub = (camp['t'] * 3) * t_rate
+                                day_acc_cost = s_sub + d_sub + t_sub
+                                
+                                # PARK MATCHING
                                 p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & \
                                          (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
                                 p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
                                 
                                 acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
-                                acc_report += f"{calc_date.date()} | {camp['prop'][:10]} | {camp['s']}S, {camp['d']}D, {camp['t']}T = ${day_acc_cost}\n"
-                                park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults}\n"
+                                
+                                # BUILD DETAILED BREAKDOWN
+                                room_breakdown = []
+                                if camp['s'] > 0: room_breakdown.append(f"{camp['s']}S ({camp['s']} Pax x ${s_rate})")
+                                if camp['d'] > 0: room_breakdown.append(f"{camp['d']}D ({camp['d']*2} Pax x ${d_rate})")
+                                if camp['t'] > 0: room_breakdown.append(f"{camp['t']}T ({camp['t']*3} Pax x ${t_rate})")
+                                
+                                breakdown_str = ", ".join(room_breakdown)
+                                acc_report += f"{calc_date.date()} | {camp['prop'][:10]} | {breakdown_str} = ${day_acc_cost:,.2f}\n"
+                                park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults:,.2f}\n"
                                 calc_date += timedelta(days=1)
 
                         total_days = (travel_end - travel_start).days + 1
