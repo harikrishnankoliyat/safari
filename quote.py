@@ -5,6 +5,8 @@ import os
 import math
 from fpdf import FPDF
 import io
+# NEW: Import the Word logic from your second file
+from file import generate_word_quotation
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Jaws Africa Safari Planner", layout="wide")
@@ -65,34 +67,6 @@ def load_country_data(country_name):
         df[start] = pd.to_datetime(df[start])
         df[end] = pd.to_datetime(df[end])
     return df_acc, df_park, df_comm, df_veh
-
-def create_pdf(grand_total, per_person, acc_report, park_report, veh_math, comm_math, extra_charges):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="Jaws Africa Safari Quotation", ln=True, align='C')
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="1. Accommodation Breakdown", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 5, txt=acc_report)
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="2. Park Fees Breakdown", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 5, txt=park_report)
-    
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt="3. Transport & Fees", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 5, txt=f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional: ${extra_charges:,.2f}")
-    
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt=f"TOTAL TRIP COST: ${grand_total:,.2f}", ln=True)
-    pdf.cell(200, 10, txt=f"COST PER PERSON: ${per_person:,.2f}", ln=True)
-    
-    return pdf.output(dest='S').encode('latin-1')
 
 st.title("🦁 Jaws Africa Safari Planner")
 
@@ -158,6 +132,7 @@ if selected_country:
                         loc_df = df_acc[df_acc['Location'] == loc]
                     with c2:
                         acc_type = st.selectbox("Room Type", sorted(loc_df['Room Type'].unique()), key=f"type_{i}")
+                        # FIX: Use correct column reference loc_df['Room Type']
                         type_df = loc_df[loc_df['Room Type'] == acc_type]
                     with c3:
                         prop = st.selectbox("Property", sorted(type_df['Property'].unique()), key=f"prop_{i}")
@@ -199,7 +174,37 @@ if selected_country:
                 st.success("✅ All nights are allotted.")
 
             st.divider()
-            extra_charges = st.number_input("Additional Charges ($)", value=0.0)
+            
+            # --- UPDATED ADDITIONAL CHARGES SECTION ---
+            st.subheader("6. Additional Charges")
+            if 'extra_items' not in st.session_state:
+                st.session_state.extra_items = [{'name': '', 'price': 0.0, 'qty': 1}]
+
+            def add_item_row():
+                st.session_state.extra_items.append({'name': '', 'price': 0.0, 'qty': 1})
+
+            def remove_item_row(index):
+                st.session_state.extra_items.pop(index)
+
+            for i, item in enumerate(st.session_state.extra_items):
+                col1, col2, col3, col4 = st.columns([4, 2, 1, 0.5])
+                with col1:
+                    item['name'] = st.text_input("Item Name", value=item['name'], key=f"item_name_{i}")
+                with col2:
+                    item['price'] = st.number_input("Price ($)", value=item['price'], min_value=0.0, step=1.0, key=f"item_price_{i}")
+                with col3:
+                    item['qty'] = st.number_input("Qty", value=item['qty'], min_value=1, step=1, key=f"item_qty_{i}")
+                with col4:
+                    st.markdown("<br>", unsafe_allow_html=True) # Align button with inputs
+                    if st.button("🗑️", key=f"remove_item_{i}"):
+                        remove_item_row(i)
+                        st.rerun()
+
+            st.button("➕ Add Item Row", on_click=add_item_row)
+            
+            # Calculate total extra charges
+            extra_charges = sum(item['price'] * item['qty'] for item in st.session_state.extra_items)
+            extra_charges_details = [{'Item Name': item['name'], 'Price ($)': item['price'], 'Qty': item['qty']} for item in st.session_state.extra_items if item['name']]
 
             if st.button("🚀 GENERATE CALCULATION", type="primary"):
                 all_valid = all([c['valid'] for c in camp_data])
@@ -212,101 +217,68 @@ if selected_country:
                         acc_total, park_total = 0.0, 0.0
                         acc_report, park_report = "", ""
                         calc_date = pd.to_datetime(travel_start)
-                        
+                        iti_base_data = []
+
                         for camp in camp_data:
-                            for _ in range(camp['nights']):
+                            for day_count in range(camp['nights']):
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
+                                row = camp['df'][a_mask].iloc[0]
+                                s_rate = float(row["Single (Cost Per Person/Per Night)"]) if not pd.isna(row["Single (Cost Per Person/Per Night)"]) else 0
+                                d_rate = float(row["Double (Cost Per Person/Per Night)"]) if not pd.isna(row["Double (Cost Per Person/Per Night)"]) else 0
+                                t_rate = float(row["Triple (Cost Per Person/Per Night)"]) if not pd.isna(row["Triple (Cost Per Person/Per Night)"]) else 0
                                 
-                                try:
-                                    row = camp['df'][a_mask].iloc[0]
-                                    s_rate, d_rate, t_rate = 0, 0, 0
-                                    
-                                    # Target room type rate validation
-                                    if camp['s'] > 0:
-                                        val = row["Single (Cost Per Person/Per Night)"]
-                                        if pd.isna(val):
-                                            st.error(f"❌ Single Room rate not found for {camp['prop']} on {calc_date.date()}.")
-                                            st.stop()
-                                        s_rate = float(val)
-                                    
-                                    if camp['d'] > 0:
-                                        val = row["Double (Cost Per Person/Per Night)"]
-                                        if pd.isna(val):
-                                            st.error(f"❌ Double Room rate not found for {camp['prop']} on {calc_date.date()}.")
-                                            st.stop()
-                                        d_rate = float(val)
-                                        
-                                    if camp['t'] > 0:
-                                        val = row["Triple (Cost Per Person/Per Night)"]
-                                        if pd.isna(val):
-                                            st.error(f"❌ Triple Room rate not found for {camp['prop']} on {calc_date.date()}.")
-                                            st.stop()
-                                        t_rate = float(val)
-                                        
-                                except IndexError:
-                                    st.error(f"❌ No pricing data found for {camp['prop']} on {calc_date.date()}.")
+                                if (camp['s'] > 0 and s_rate == 0) or (camp['d'] > 0 and d_rate == 0) or (camp['t'] > 0 and t_rate == 0):
+                                    st.error(f"❌ Rate not found for room selection at {camp['prop']} on {calc_date.date()}")
                                     st.stop()
-                                
-                                s_sub = camp['s'] * s_rate
-                                d_sub = (camp['d'] * 2) * d_rate
-                                t_sub = (camp['t'] * 3) * t_rate
-                                day_acc_cost = s_sub + d_sub + t_sub
-                                
-                                p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & \
-                                         (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
-                                
-                                try:
-                                    p_rate_val = df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD']
-                                    if pd.isna(p_rate_val):
-                                        st.error(f"❌ Park fee rate not found for {camp['loc']} on {calc_date.date()}.")
-                                        st.stop()
-                                    p_rate = float(p_rate_val)
-                                except IndexError:
-                                    st.error(f"❌ No park fee record found for {camp['loc']} on {calc_date.date()}.")
-                                    st.stop()
+
+                                day_acc_cost = (camp['s'] * s_rate) + (camp['d'] * 2 * d_rate) + (camp['t'] * 3 * t_rate)
+                                p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
+                                p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
                                 
                                 acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
                                 
-                                room_breakdown = []
-                                if camp['s'] > 0: room_breakdown.append(f"{camp['s']}S ({camp['s']} Pax x ${s_rate})")
-                                if camp['d'] > 0: room_breakdown.append(f"{camp['d']}D ({camp['d']*2} Pax x ${d_rate})")
-                                if camp['t'] > 0: room_breakdown.append(f"{camp['t']}T ({camp['t']*3} Pax x ${t_rate})")
+                                room_math = []
+                                if camp['s'] > 0: room_math.append(f"{camp['s']}S ({camp['s']} Pax x ${s_rate})")
+                                if camp['d'] > 0: room_math.append(f"{camp['d']}D ({camp['d']*2} Pax x ${d_rate})")
+                                if camp['t'] > 0: room_math.append(f"{camp['t']}T ({camp['t']*3} Pax x ${t_rate})")
                                 
-                                breakdown_str = ", ".join(room_breakdown)
-                                acc_report += f"{calc_date.date()} | {camp['prop'][:15]} | {breakdown_str} = ${day_acc_cost:,.2f}\n"
+                                acc_report += f"{calc_date.date()} | {camp['prop'][:15]} | {', '.join(room_math)} = ${day_acc_cost:,.2f}\n"
                                 park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults:,.2f}\n"
+                                
+                                iti_base_data.append({
+                                    "Day": f"Day-{len(iti_base_data)+1}",
+                                    "From": "Nairobi" if len(iti_base_data) == 0 else iti_base_data[-1]["To"],
+                                    "To": camp['loc'],
+                                    "Activities": "Airport Pickup / Transfer" if len(iti_base_data) == 0 else "Game Drive",
+                                    "Accommodation": camp['prop'],
+                                    "Meal Plan": "LD"
+                                })
                                 calc_date += timedelta(days=1)
 
+                        iti_base_data.append({"Day": f"Day-{len(iti_base_data)+1}", "From": iti_base_data[-1]["To"], "To": "Nairobi", "Activities": "Transfer / Airport Drop", "Accommodation": "End of Trip", "Meal Plan": "B"})
+
                         total_days = (travel_end - travel_start).days + 1
-                        veh_rate_val = df_veh.iloc[0]['Cost in USD/Per Day']
-                        if pd.isna(veh_rate_val):
-                            st.error("❌ Vehicle rate not found in Excel.")
-                            st.stop()
-                        veh_rate = float(veh_rate_val)
+                        veh_rate = float(df_veh.iloc[0]['Cost in USD/Per Day'])
                         total_veh_cost = veh_rate * total_days * num_vehicles
-                        
-                        comm_val_raw = df_comm.iloc[0]['Commission Per Person (USD)']
-                        if pd.isna(comm_val_raw):
-                            st.error("❌ Commission rate not found in Excel.")
-                            st.stop()
-                        comm_val = float(comm_val_raw)
+                        comm_val = float(df_comm.iloc[0]['Commission Per Person (USD)'])
                         total_comm = comm_val * num_adults
-                        
                         grand_total = acc_total + park_total + total_veh_cost + total_comm + extra_charges
 
-                        # DISPLAY BREAKDOWN
                         st.subheader("Quotation Breakdown")
                         st.markdown("#### 1. Accommodation")
                         st.code(f"{acc_report}Subtotal: ${acc_total:,.2f}")
-                        
                         st.markdown("#### 2. Park Fees")
                         st.code(f"{park_report}Subtotal: ${park_total:,.2f}")
-                        
                         st.markdown("#### 3. Vehicle & Commission")
                         veh_math = f"{num_vehicles} Vehicle(s) x {total_days} Days x ${veh_rate:,.2f} = ${total_veh_cost:,.2f}"
                         comm_math = f"{num_adults} Adults x ${comm_val} = ${total_comm:,.2f}"
-                        st.code(f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional: ${extra_charges:,.2f}")
+                        
+                        extra_charges_report = ""
+                        for item in extra_charges_details:
+                            extra_charges_report += f"{item['Item Name']} (${item['Price ($)']:,.2f} x {item['Qty']}) = ${item['Price ($)'] * item['Qty']:,.2f}\n"
+                        
+                        st.code(f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional:\n{extra_charges_report}Total Additional: ${extra_charges:,.2f}")
 
                         st.markdown(f"""
                             <div class="white-total-box">
@@ -315,14 +287,39 @@ if selected_country:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # PDF GENERATION
-                        pdf_bytes = create_pdf(grand_total, grand_total/num_adults, acc_report, park_report, veh_math, comm_math, extra_charges)
-                        st.download_button(
-                            label="📥 Download Quotation PDF",
-                            data=pdf_bytes,
-                            file_name=f"Jaws_Africa_Quote_{selected_country}.pdf",
-                            mime="application/pdf"
-                        )
+                        st.session_state.last_quote = {
+                            "total": grand_total, "pp": grand_total/num_adults, "adults": num_adults,
+                            "country": selected_country, "iti": iti_base_data,
+                            "start": travel_start.strftime("%d/%m/%Y"), "end": travel_end.strftime("%d/%m/%Y"),
+                            "pkg": f"{total_days}D/{total_nights}N"
+                        }
+                        st.session_state.calculation_ready = True
 
                     except Exception as e:
                         st.error(f"Error during calculation: {e}")
+
+# --- WORD DOCUMENT SECTION ---
+if st.session_state.get('calculation_ready'):
+    st.divider()
+    st.subheader("📝 Edit Word Template & Download")
+    st.info("📝 **Note:** You can edit the table below before downloading.")
+    
+    client_name = st.text_input("Client Name", "Guest")
+    edited_iti = st.data_editor(st.session_state.last_quote['iti'], key="iti_editor", num_rows="dynamic")
+    
+    if st.button("📝 Prepare Word Document"):
+        q = st.session_state.last_quote
+        doc_params = {
+            "client": client_name,
+            "country": q['country'],
+            "code": f"{client_name[:3].upper()}_{q['country'][:3].upper()}_{datetime.now().strftime('%d%m%Y')}",
+            "pkg": q['pkg'],
+            "start": q['start'],
+            "end": q['end'],
+            "iti": edited_iti,
+            "adults": q['adults'],
+            "total": q['total'],
+            "pp": q['pp']
+        }
+        word_bytes = generate_word_quotation(doc_params)
+        st.download_button("📥 Click to Download Word File", word_bytes, f"Quote_{client_name}.docx")
