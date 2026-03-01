@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import timedelta, datetime
 import os
 import math
+from fpdf import FPDF
+import io
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Jaws Africa Safari Planner", layout="wide")
@@ -63,6 +65,34 @@ def load_country_data(country_name):
         df[start] = pd.to_datetime(df[start])
         df[end] = pd.to_datetime(df[end])
     return df_acc, df_park, df_comm, df_veh
+
+def create_pdf(grand_total, per_person, acc_report, park_report, veh_math, comm_math, extra_charges):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="Jaws Africa Safari Quotation", ln=True, align='C')
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="1. Accommodation Breakdown", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 5, txt=acc_report)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="2. Park Fees Breakdown", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 5, txt=park_report)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="3. Transport & Fees", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 5, txt=f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional: ${extra_charges:,.2f}")
+    
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt=f"TOTAL TRIP COST: ${grand_total:,.2f}", ln=True)
+    pdf.cell(200, 10, txt=f"COST PER PERSON: ${per_person:,.2f}", ln=True)
+    
+    return pdf.output(dest='S').encode('latin-1')
 
 st.title("🦁 Jaws Africa Safari Planner")
 
@@ -145,7 +175,11 @@ if selected_country:
                         nights = st.number_input("Nights", min_value=1, max_value=max(1, rem_n), value=min(1, rem_n) if rem_n > 0 else 1, key=f"n_{i}")
 
                     if total_pax_in_rooms != num_adults:
-                        st.error(f"⚠️ Room pax ({total_pax_in_rooms}) must match Total Adults ({num_adults})")
+                        diff = num_adults - total_pax_in_rooms
+                        if diff > 0:
+                            st.error(f"⚠️ Room configuration mismatch. Remaining adults to allot: {diff}")
+                        else:
+                            st.error(f"⚠️ Room configuration mismatch. Over-allotted by: {abs(diff)} adults.")
                     else:
                         st.success(f"✅ Configuration valid.")
 
@@ -183,9 +217,35 @@ if selected_country:
                             for _ in range(camp['nights']):
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
                                 
-                                s_rate = float(camp['df'][a_mask].iloc[0]["Single (Cost Per Person/Per Night)"]) if camp['s'] > 0 else 0
-                                d_rate = float(camp['df'][a_mask].iloc[0]["Double (Cost Per Person/Per Night)"]) if camp['d'] > 0 else 0
-                                t_rate = float(camp['df'][a_mask].iloc[0]["Triple (Cost Per Person/Per Night)"]) if camp['t'] > 0 else 0
+                                try:
+                                    row = camp['df'][a_mask].iloc[0]
+                                    s_rate, d_rate, t_rate = 0, 0, 0
+                                    
+                                    # Target room type rate validation
+                                    if camp['s'] > 0:
+                                        val = row["Single (Cost Per Person/Per Night)"]
+                                        if pd.isna(val):
+                                            st.error(f"❌ Single Room rate not found for {camp['prop']} on {calc_date.date()}.")
+                                            st.stop()
+                                        s_rate = float(val)
+                                    
+                                    if camp['d'] > 0:
+                                        val = row["Double (Cost Per Person/Per Night)"]
+                                        if pd.isna(val):
+                                            st.error(f"❌ Double Room rate not found for {camp['prop']} on {calc_date.date()}.")
+                                            st.stop()
+                                        d_rate = float(val)
+                                        
+                                    if camp['t'] > 0:
+                                        val = row["Triple (Cost Per Person/Per Night)"]
+                                        if pd.isna(val):
+                                            st.error(f"❌ Triple Room rate not found for {camp['prop']} on {calc_date.date()}.")
+                                            st.stop()
+                                        t_rate = float(val)
+                                        
+                                except IndexError:
+                                    st.error(f"❌ No pricing data found for {camp['prop']} on {calc_date.date()}.")
+                                    st.stop()
                                 
                                 s_sub = camp['s'] * s_rate
                                 d_sub = (camp['d'] * 2) * d_rate
@@ -194,7 +254,16 @@ if selected_country:
                                 
                                 p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & \
                                          (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
-                                p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
+                                
+                                try:
+                                    p_rate_val = df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD']
+                                    if pd.isna(p_rate_val):
+                                        st.error(f"❌ Park fee rate not found for {camp['loc']} on {calc_date.date()}.")
+                                        st.stop()
+                                    p_rate = float(p_rate_val)
+                                except IndexError:
+                                    st.error(f"❌ No park fee record found for {camp['loc']} on {calc_date.date()}.")
+                                    st.stop()
                                 
                                 acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
@@ -205,17 +274,23 @@ if selected_country:
                                 if camp['t'] > 0: room_breakdown.append(f"{camp['t']}T ({camp['t']*3} Pax x ${t_rate})")
                                 
                                 breakdown_str = ", ".join(room_breakdown)
-                                acc_report += f"{calc_date.date()} | {camp['prop'][:10]} | {breakdown_str} = ${day_acc_cost:,.2f}\n"
+                                acc_report += f"{calc_date.date()} | {camp['prop'][:15]} | {breakdown_str} = ${day_acc_cost:,.2f}\n"
                                 park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults:,.2f}\n"
                                 calc_date += timedelta(days=1)
 
-                        # --- DETAILED VEHICLE CALCULATION ---
                         total_days = (travel_end - travel_start).days + 1
-                        veh_rate = float(df_veh.iloc[0]['Cost in USD/Per Day'])
+                        veh_rate_val = df_veh.iloc[0]['Cost in USD/Per Day']
+                        if pd.isna(veh_rate_val):
+                            st.error("❌ Vehicle rate not found in Excel.")
+                            st.stop()
+                        veh_rate = float(veh_rate_val)
                         total_veh_cost = veh_rate * total_days * num_vehicles
                         
-                        # Commission Calculation
-                        comm_val = float(df_comm.iloc[0]['Commission Per Person (USD)'])
+                        comm_val_raw = df_comm.iloc[0]['Commission Per Person (USD)']
+                        if pd.isna(comm_val_raw):
+                            st.error("❌ Commission rate not found in Excel.")
+                            st.stop()
+                        comm_val = float(comm_val_raw)
                         total_comm = comm_val * num_adults
                         
                         grand_total = acc_total + park_total + total_veh_cost + total_comm + extra_charges
@@ -239,5 +314,15 @@ if selected_country:
                                 <span class="per-person-text">COST PER PERSON: ${grand_total/num_adults:,.2f}</span>
                             </div>
                         """, unsafe_allow_html=True)
+                        
+                        # PDF GENERATION
+                        pdf_bytes = create_pdf(grand_total, grand_total/num_adults, acc_report, park_report, veh_math, comm_math, extra_charges)
+                        st.download_button(
+                            label="📥 Download Quotation PDF",
+                            data=pdf_bytes,
+                            file_name=f"Jaws_Africa_Quote_{selected_country}.pdf",
+                            mime="application/pdf"
+                        )
+
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"Error during calculation: {e}")
