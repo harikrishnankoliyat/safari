@@ -99,8 +99,8 @@ if selected_country:
             with col_a:
                 st.subheader("3. Travelers & Dates")
                 num_adults = st.number_input("Total Number of Adults", min_value=1, value=2)
-                travel_start = st.date_input("Start Date", value=datetime(2026, 6, 14))
-                travel_end = st.date_input("End Date", value=datetime(2026, 6, 20))
+                travel_start = st.date_input("Start Date", value=datetime(2026, 6, 14), format="DD/MM/YYYY")
+                travel_end = st.date_input("End Date", value=datetime(2026, 6, 20), format="DD/MM/YYYY")
                 
                 if travel_end < travel_start:
                     st.error("❌ End date cannot be before start date.")
@@ -246,17 +246,28 @@ if selected_country:
                                 acc_report += f"{calc_date.date()} | {camp['prop'][:15]} | {', '.join(room_math)} = ${day_acc_cost:,.2f}\n"
                                 park_report += f"{calc_date.date()} | {camp['loc'][:15]} | {num_adults} Pax x ${p_rate} = ${p_rate*num_adults:,.2f}\n"
                                 
+                                # Determine meal plan: Day 1 = LD, Others = BLD
+                                current_meal = "LD" if len(iti_base_data) == 0 else "BLD"
+                                
                                 iti_base_data.append({
                                     "Day": f"Day-{len(iti_base_data)+1}",
                                     "From": "Nairobi" if len(iti_base_data) == 0 else iti_base_data[-1]["To"],
                                     "To": camp['loc'],
                                     "Activities": "Airport Pickup / Transfer" if len(iti_base_data) == 0 else "Game Drive",
                                     "Accommodation": camp['prop'],
-                                    "Meal Plan": "LD"
+                                    "Meal Plan": current_meal
                                 })
                                 calc_date += timedelta(days=1)
 
-                        iti_base_data.append({"Day": f"Day-{len(iti_base_data)+1}", "From": iti_base_data[-1]["To"], "To": "Nairobi", "Activities": "Transfer / Airport Drop", "Accommodation": "End of Trip", "Meal Plan": "B"})
+                        # Final Day: Always set to BL
+                        iti_base_data.append({
+                            "Day": f"Day-{len(iti_base_data)+1}", 
+                            "From": iti_base_data[-1]["To"], 
+                            "To": "Nairobi", 
+                            "Activities": "Transfer / Airport Drop", 
+                            "Accommodation": "End of Trip", 
+                            "Meal Plan": "BL"
+                        })
 
                         total_days = (travel_end - travel_start).days + 1
                         veh_rate = float(df_veh.iloc[0]['Cost in USD/Per Day'])
@@ -301,14 +312,36 @@ if selected_country:
 # --- WORD DOCUMENT SECTION ---
 if st.session_state.get('calculation_ready'):
     st.divider()
-    st.subheader("📝 Edit Word Template & Download")
-    st.info("📝 **Note:** You can edit the table below before downloading.")
+    st.subheader("📝 Itinerary Table")
+    st.info("""
+    📝 **Note:** You can edit the table below before downloading
+    * Check/modify the meal plans
+    * Add activities if required
+    """)
     
     client_name = st.text_input("Client Name", "Guest")
     edited_iti = st.data_editor(st.session_state.last_quote['iti'], key="iti_editor", num_rows="dynamic")
     
     if st.button("📝 Prepare Word Document"):
         q = st.session_state.last_quote
+        
+        # --- NEW: Detailed Room & Lodge Summary ---
+        stay_details = []
+        for camp in camp_data:
+            rooms = []
+            if camp['s'] > 0: rooms.append(f"{camp['s']} Single")
+            if camp['d'] > 0: rooms.append(f"{camp['d']} Double")
+            if camp['t'] > 0: rooms.append(f"{camp['t']} Triple")
+            
+            if len(rooms) > 1:
+                room_str = ", ".join(rooms[:-1]) + " and " + rooms[-1]
+            else:
+                room_str = rooms[0] if rooms else ""
+            stay_details.append(f"{room_str} occupancy rooms at {camp['prop']} for {camp['nights']} night(s)")
+        
+        # Combine all stays (e.g., "Stay A... and Stay B...")
+        full_accommodation_summary = ", ".join(stay_details)
+        
         doc_params = {
             "client": client_name,
             "country": q['country'],
@@ -319,7 +352,9 @@ if st.session_state.get('calculation_ready'):
             "iti": edited_iti,
             "adults": q['adults'],
             "total": q['total'],
-            "pp": q['pp']
+            "pp": q['pp'],
+            "vehicles": num_vehicles,
+            "accommodation_summary": full_accommodation_summary # Sending the detailed string
         }
         word_bytes = generate_word_quotation(doc_params)
-        st.download_button("📥 Click to Download Word File", word_bytes, f"Quote_{client_name}.docx")
+        st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx")
