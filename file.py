@@ -217,7 +217,7 @@ def generate_word_quotation(q):
             cell.paragraphs[0].runs[0].font.name = 'Calibri'
     # --- TARIFF SUMMARY SENTENCE ---
     summary_text = (
-        f"\nThis price is for {q['adults']} adults traveling in {q['vehicles']} private "
+        f"This price is for {q['adults']} adults traveling in {q['vehicles']} private "
         f"safari vehicle(s) with accommodation in {q['accommodation_summary']} "
         f"as per the itinerary above."
     )
@@ -226,12 +226,48 @@ def generate_word_quotation(q):
     p_summary.paragraph_format.space_after = Pt(8)
     p_summary.paragraph_format.left_indent = Cm(0.12)
     
-    # APPLY ITALIC FORMATTING HERE
     for run in p_summary.runs:
         run.font.name = 'Calibri'
-        run.italic = True  # This makes the text slanted (italic)
+        run.italic = True 
         run.font.size = Pt(10.5)
-        run.font.color.rgb = RGBColor(0, 0, 0) # Ensuring text is black
+        run.font.color.rgb = RGBColor(0, 0, 0)
+
+    # --- 7. DETAILED ITINERARY SECTION (JUSTIFIED) ---
+    if q.get('detailed_iti'):
+        add_styled_heading('DETAILED ITINERARY')
+        
+        for day_info in q['detailed_iti']:
+            # --- Day Title ---
+            p_day = doc.add_paragraph()
+            p_day.paragraph_format.space_before = Pt(10)
+            p_day.paragraph_format.space_after = Pt(2)
+            p_day.paragraph_format.left_indent = Cm(0) 
+            
+            run_day = p_day.add_run(f"{day_info['day']} :-")
+            run_day.bold = True
+            run_day.underline = True
+            run_day.font.name = 'Calibri'
+            run_day.font.size = Pt(11)
+            
+            # --- Day Details (Justified Alignment) ---
+            p_details = doc.add_paragraph(day_info['details'])
+            p_details.paragraph_format.space_after = Pt(12)
+            
+            # SET ALIGNMENT TO JUSTIFY
+            p_details.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            
+            # Match table border alignment (0.12cm)
+            p_details.paragraph_format.left_indent = Cm(0.12)
+            p_details.paragraph_format.right_indent = Cm(0)
+            
+            # Standard line spacing for readability
+            p_details.paragraph_format.line_spacing = 1.15
+            
+            for run in p_details.runs:
+                run.font.name = 'Calibri'
+                run.font.size = Pt(10.5)
+                run.font.color.rgb = RGBColor(0, 0, 0)
+   
 
     # --- 7. UPDATED INCLUSIONS ---
     add_styled_heading('INCLUSIONS')

@@ -8,6 +8,14 @@ import io
 # NEW: Import the Word logic from your second file
 from file import generate_word_quotation
 
+
+# --- 1. Define the Mapping (Place this at the top of your file) ---
+AIRPORT_MAP = {
+    "Kenya": "Nairobi",
+    "Tanzania": "Kilimanjaro",
+    "Uganda": "Entebbe",
+    "Rwanda": "Kigali"
+}
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Jaws Africa Safari Planner", layout="wide")
 
@@ -219,25 +227,33 @@ if selected_country:
                         calc_date = pd.to_datetime(travel_start)
                         iti_base_data = []
 
+                        start_airport = AIRPORT_MAP.get(selected_country, "Nairobi")
+
                         for camp in camp_data:
                             for day_count in range(camp['nights']):
+                                # Find the correct rate based on the date
                                 a_mask = (camp['df']['Date From'] <= calc_date) & (camp['df']['Date To'] >= calc_date)
                                 row = camp['df'][a_mask].iloc[0]
+                                
                                 s_rate = float(row["Single (Cost Per Person/Per Night)"]) if not pd.isna(row["Single (Cost Per Person/Per Night)"]) else 0
                                 d_rate = float(row["Double (Cost Per Person/Per Night)"]) if not pd.isna(row["Double (Cost Per Person/Per Night)"]) else 0
                                 t_rate = float(row["Triple (Cost Per Person/Per Night)"]) if not pd.isna(row["Triple (Cost Per Person/Per Night)"]) else 0
                                 
+                                # Validation for missing rates
                                 if (camp['s'] > 0 and s_rate == 0) or (camp['d'] > 0 and d_rate == 0) or (camp['t'] > 0 and t_rate == 0):
                                     st.error(f"❌ Rate not found for room selection at {camp['prop']} on {calc_date.date()}")
                                     st.stop()
 
                                 day_acc_cost = (camp['s'] * s_rate) + (camp['d'] * 2 * d_rate) + (camp['t'] * 3 * t_rate)
+                                
+                                # Calculate Park Fees
                                 p_mask = (df_park['Location'] == camp['loc']) & (df_park['Dates From'] <= calc_date) & (df_park['Dates To'] >= calc_date) & (df_park['Travellers  Category'] == 'Adult')
                                 p_rate = float(df_park[p_mask].iloc[0]['Park Fee Per Night Per Person in USD'])
                                 
                                 acc_total += day_acc_cost
                                 park_total += (p_rate * num_adults)
                                 
+                                # Format the breakdown report
                                 room_math = []
                                 if camp['s'] > 0: room_math.append(f"{camp['s']}S ({camp['s']} Pax x ${s_rate})")
                                 if camp['d'] > 0: room_math.append(f"{camp['d']}D ({camp['d']*2} Pax x ${d_rate})")
@@ -249,9 +265,12 @@ if selected_country:
                                 # Determine meal plan: Day 1 = LD, Others = BLD
                                 current_meal = "LD" if len(iti_base_data) == 0 else "BLD"
                                 
+                                # DYNAMIC 'FROM' LOGIC: Use start_airport for the very first day
+                                current_from = start_airport if len(iti_base_data) == 0 else iti_base_data[-1]["To"]
+                                
                                 iti_base_data.append({
                                     "Day": f"Day-{len(iti_base_data)+1}",
-                                    "From": "Nairobi" if len(iti_base_data) == 0 else iti_base_data[-1]["To"],
+                                    "From": current_from,
                                     "To": camp['loc'],
                                     "Activities": "Airport Pickup / Transfer" if len(iti_base_data) == 0 else "Game Drive",
                                     "Accommodation": camp['prop'],
@@ -259,11 +278,11 @@ if selected_country:
                                 })
                                 calc_date += timedelta(days=1)
 
-                        # Final Day: Always set to BL
+                        # --- 3. Final Day (Dynamic 'To' Airport) ---
                         iti_base_data.append({
                             "Day": f"Day-{len(iti_base_data)+1}", 
                             "From": iti_base_data[-1]["To"], 
-                            "To": "Nairobi", 
+                            "To": start_airport, # DYNAMIC: Returns to the country-specific airport
                             "Activities": "Transfer / Airport Drop", 
                             "Accommodation": "End of Trip", 
                             "Meal Plan": "BL"
@@ -312,20 +331,55 @@ if selected_country:
 # --- WORD DOCUMENT SECTION ---
 if st.session_state.get('calculation_ready'):
     st.divider()
-    st.subheader("📝 Itinerary Table")
+    st.subheader("📋 Itinerary Table")
     st.info("""
     📝 **Note:** You can edit the table below before downloading
     * Check/modify the meal plans
     * Add activities if required
     """)
     
-    client_name = st.text_input("Client Name", "Guest")
+    client_name = st.text_input("Client Name", "Guest", key="client_name_input")
     edited_iti = st.data_editor(st.session_state.last_quote['iti'], key="iti_editor", num_rows="dynamic")
     
-    if st.button("📝 Prepare Word Document"):
+    # --- 7. DETAILED ITINERARY UI (EXPANDABLE) ---
+    
+    
+    # Using an expander with a suitcase icon
+    with st.expander("🐾 Detailed Itinerary (Optional)", expanded=False):
+        st.info("Fill this section to add day-by-day descriptions below the Tariff table.")
+        
+        if 'detailed_iti' not in st.session_state:
+            st.session_state.detailed_iti = [] 
+
+        def add_iti_day():
+            new_day_num = len(st.session_state.detailed_iti) + 1
+            st.session_state.detailed_iti.append({'day': f"Day {new_day_num}", 'details': ''})
+
+        def remove_iti_day(index):
+            st.session_state.detailed_iti.pop(index)
+
+        for i, day_item in enumerate(st.session_state.detailed_iti):
+            col1, col2, col3 = st.columns([1, 4, 0.5])
+            with col1:
+                day_item['day'] = st.text_input("Day label", value=day_item['day'], key=f"det_day_ui_{i}")
+            with col2:
+                day_item['details'] = st.text_area("Detailed Description", value=day_item['details'], key=f"det_desc_ui_{i}", height=68)
+            with col3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"remove_det_ui_btn_{i}"):
+                    remove_iti_day(i)
+                    st.rerun()
+
+        st.button("➕ Add Detailed Day", on_click=add_iti_day, key="add_det_day_btn_final")
+    
+    # Filter for Word Doc
+    clean_detailed_iti = [d for d in st.session_state.detailed_iti if d['details'].strip()]
+    st.divider()
+
+    if st.button("📝 Prepare Word Document", key="prepare_word_final_btn"):
         q = st.session_state.last_quote
         
-        # --- NEW: Detailed Room & Lodge Summary ---
+        # --- Detailed Room & Lodge Summary ---
         stay_details = []
         for camp in camp_data:
             rooms = []
@@ -339,7 +393,6 @@ if st.session_state.get('calculation_ready'):
                 room_str = rooms[0] if rooms else ""
             stay_details.append(f"{room_str} occupancy rooms at {camp['prop']} for {camp['nights']} night(s)")
         
-        # Combine all stays (e.g., "Stay A... and Stay B...")
         full_accommodation_summary = ", ".join(stay_details)
         
         doc_params = {
@@ -354,7 +407,8 @@ if st.session_state.get('calculation_ready'):
             "total": q['total'],
             "pp": q['pp'],
             "vehicles": num_vehicles,
-            "accommodation_summary": full_accommodation_summary # Sending the detailed string
+            "accommodation_summary": full_accommodation_summary,
+            "detailed_iti": clean_detailed_iti # Pass the detailed itinerary
         }
         word_bytes = generate_word_quotation(doc_params)
-        st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx")
+        st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx", key="download_word_btn_final")
