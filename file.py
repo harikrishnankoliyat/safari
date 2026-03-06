@@ -216,11 +216,16 @@ def generate_word_quotation(q):
         if cell.paragraphs[0].runs:
             cell.paragraphs[0].runs[0].font.name = 'Calibri'
     # --- TARIFF SUMMARY SENTENCE ---
+    # --- TARIFF SUMMARY SENTENCE ---
     summary_text = (
         f"This price is for {q['adults']} adults traveling in {q['vehicles']} private "
         f"safari vehicle(s) with accommodation in {q['accommodation_summary']} "
         f"as per the itinerary above."
     )
+    
+    # Check if there are extra items to add to the sentence
+    if q.get('extras_summary'):
+        summary_text += f" This price also includes {q['extras_summary']}."
     
     p_summary = doc.add_paragraph(summary_text)
     p_summary.paragraph_format.space_after = Pt(8)
@@ -231,7 +236,7 @@ def generate_word_quotation(q):
         run.italic = True 
         run.font.size = Pt(10.5)
         run.font.color.rgb = RGBColor(0, 0, 0)
-
+        
     # --- 7. DETAILED ITINERARY SECTION (JUSTIFIED) ---
     if q.get('detailed_iti'):
         add_styled_heading('DETAILED ITINERARY')

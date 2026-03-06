@@ -295,27 +295,32 @@ if selected_country:
                         total_comm = comm_val * num_adults
                         grand_total = acc_total + park_total + total_veh_cost + total_comm + extra_charges
 
-                        st.subheader("Quotation Breakdown")
-                        st.markdown("#### 1. Accommodation")
-                        st.code(f"{acc_report}Subtotal: ${acc_total:,.2f}")
-                        st.markdown("#### 2. Park Fees")
-                        st.code(f"{park_report}Subtotal: ${park_total:,.2f}")
-                        st.markdown("#### 3. Vehicle & Commission")
-                        veh_math = f"{num_vehicles} Vehicle(s) x {total_days} Days x ${veh_rate:,.2f} = ${total_veh_cost:,.2f}"
-                        comm_math = f"{num_adults} Adults x ${comm_val} = ${total_comm:,.2f}"
-                        
-                        extra_charges_report = ""
-                        for item in extra_charges_details:
-                            extra_charges_report += f"{item['Item Name']} (${item['Price ($)']:,.2f} x {item['Qty']}) = ${item['Price ($)'] * item['Qty']:,.2f}\n"
-                        
-                        st.code(f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional:\n{extra_charges_report}Total Additional: ${extra_charges:,.2f}")
+                        # --- REPLACE THE HIGHLIGHTED SECTION WITH THIS ---
 
-                        st.markdown(f"""
-                            <div class="white-total-box">
-                                <span class="total-title-text">TOTAL TRIP COST: ${grand_total:,.2f}</span>
-                                <span class="per-person-text">COST PER PERSON: ${grand_total/num_adults:,.2f}</span>
-                            </div>
-                        """, unsafe_allow_html=True)
+                        # Check if we should hide details (default to False if not set)
+                        if not st.session_state.get('hide_details', False):
+                            st.subheader("Quotation Breakdown")
+                            st.markdown("#### 1. Accommodation")
+                            st.code(f"{acc_report}Subtotal: ${acc_total:,.2f}")
+                            st.markdown("#### 2. Park Fees")
+                            st.code(f"{park_report}Subtotal: ${park_total:,.2f}")
+                            st.markdown("#### 3. Vehicle & Commission")
+                            veh_math = f"{num_vehicles} Vehicle(s) x {total_days} Days x ${veh_rate:,.2f} = ${total_veh_cost:,.2f}"
+                            comm_math = f"{num_adults} Adults x ${comm_val} = ${total_comm:,.2f}"
+                            
+                            extra_charges_report = ""
+                            for item in extra_charges_details:
+                                extra_charges_report += f"{item['Item Name']} (${item['Price ($)']:,.2f} x {item['Qty']}) = ${item['Price ($)'] * item['Qty']:,.2f}\n"
+                            
+                            st.code(f"Vehicle: {veh_math}\nCommission: {comm_math}\nAdditional:\n{extra_charges_report}Total Additional: ${extra_charges:,.2f}")
+
+                            st.markdown(f"""
+                                <div class="white-total-box">
+                                    <span class="total-title-text">TOTAL TRIP COST: ${grand_total:,.2f}</span>
+                                    <span class="per-person-text">COST PER PERSON: ${grand_total/num_adults:,.2f}</span>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        # --- END OF REPLACEMENT ---
                         
                         st.session_state.last_quote = {
                             "total": grand_total, "pp": grand_total/num_adults, "adults": num_adults,
@@ -377,9 +382,10 @@ if st.session_state.get('calculation_ready'):
     st.divider()
 
     if st.button("📝 Prepare Word Document", key="prepare_word_final_btn"):
+        st.session_state.hide_details = True
         q = st.session_state.last_quote
         
-        # --- Detailed Room & Lodge Summary ---
+        # --- 1. Existing Accommodation Summary Logic ---
         stay_details = []
         for camp in camp_data:
             rooms = []
@@ -387,14 +393,22 @@ if st.session_state.get('calculation_ready'):
             if camp['d'] > 0: rooms.append(f"{camp['d']} Double")
             if camp['t'] > 0: rooms.append(f"{camp['t']} Triple")
             
-            if len(rooms) > 1:
-                room_str = ", ".join(rooms[:-1]) + " and " + rooms[-1]
-            else:
-                room_str = rooms[0] if rooms else ""
+            room_str = ", ".join(rooms[:-1]) + " and " + rooms[-1] if len(rooms) > 1 else (rooms[0] if rooms else "")
             stay_details.append(f"{room_str} occupancy rooms at {camp['prop']} for {camp['nights']} night(s)")
         
         full_accommodation_summary = ", ".join(stay_details)
+
+        # --- 2. NEW: Additional Charges Summary Logic ---
+        # Get names of items that have a name and a price > 0
+        extra_names = [item['name'].strip() for item in st.session_state.extra_items if item['name'].strip() and item['price'] > 0]
         
+        extras_str = ""
+        if extra_names:
+            if len(extra_names) == 1:
+                extras_str = extra_names[0]
+            else:
+                extras_str = ", ".join(extra_names[:-1]) + " and " + extra_names[-1]
+
         doc_params = {
             "client": client_name,
             "country": q['country'],
@@ -408,7 +422,9 @@ if st.session_state.get('calculation_ready'):
             "pp": q['pp'],
             "vehicles": num_vehicles,
             "accommodation_summary": full_accommodation_summary,
-            "detailed_iti": clean_detailed_iti # Pass the detailed itinerary
+            "extras_summary": extras_str, # <--- NEW KEY
+            "detailed_iti": clean_detailed_iti
         }
         word_bytes = generate_word_quotation(doc_params)
+        st.success("✅ Quotation Generated Successfully!")
         st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx", key="download_word_btn_final")
