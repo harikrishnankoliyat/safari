@@ -92,12 +92,11 @@ def generate_word_quotation(q):
 
     # --- 4. BODY CONTENT (UNDERLINED TITLE WITH GAP) ---
     title = doc.add_paragraph()
-    # Adding space_after creates the gap between the title and summary lines
     title.paragraph_format.space_after = Pt(10) 
     
     run = title.add_run(f"Quotation for {q['client']}| {q['country']}")
     run.bold = True
-    run.underline = True # Adds the underline to the title
+    run.underline = True 
     run.font.size = Pt(14)
     run.font.name = 'Calibri'
 
@@ -138,7 +137,6 @@ def generate_word_quotation(q):
         cell._tc.get_or_add_tcPr().append(shading_elm)
 
     # --- 5. ITINERARY TABLE ---
-    # --- 5. ITINERARY TABLE ---
     add_styled_heading('ITINERARY PLAN')
     iti_table = doc.add_table(rows=1, cols=6)
     iti_table.style = 'Table Grid'
@@ -148,7 +146,7 @@ def generate_word_quotation(q):
     # SHIFT TABLE RIGHT: Accessing XML to set left indentation
     tbl_pr = iti_table._element.xpath('w:tblPr')[0]
     tbl_ind = OxmlElement('w:tblInd')
-    tbl_ind.set(qn('w:w'), '100') # Value in twentieths of a point (approx 0.44cm)
+    tbl_ind.set(qn('w:w'), '100') 
     tbl_ind.set(qn('w:type'), 'dxa')
     tbl_pr.append(tbl_ind)
 
@@ -156,8 +154,7 @@ def generate_word_quotation(q):
     for i, h in enumerate(hdrs):
         cell = iti_table.rows[0].cells[i]
         cell.text = h
-        set_cell_grey(cell) # Apply the grey background
-        # Set Bold and Calibri for headers
+        set_cell_grey(cell) 
         p = cell.paragraphs[0]
         if p.runs:
             run = p.runs[0]
@@ -180,50 +177,87 @@ def generate_word_quotation(q):
                 for r in p.runs:
                     r.font.name = 'Calibri'
 
-    # --- 6. TARIFF TABLE ---
+    # --- NEW: DETAILED PRICE BREAKDOWN TABLE ---
+    if q.get('price_table') is not None:
+        add_styled_heading('DETAILED PRICE BREAKDOWN')
+        p_table = doc.add_table(rows=1, cols=2)
+        p_table.style = 'Table Grid'
+        p_table.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p_table.width = content_width
+
+        p_tbl_pr = p_table._element.xpath('w:tblPr')[0]
+        p_tbl_ind = OxmlElement('w:tblInd')
+        p_tbl_ind.set(qn('w:w'), '100') 
+        p_tbl_ind.set(qn('w:type'), 'dxa')
+        p_tbl_pr.append(p_tbl_ind)
+
+        h_cells = p_table.rows[0].cells
+        h_cells[0].text = "Traveler Category"; h_cells[1].text = "Total Cost (USD)"
+        for c in h_cells: 
+            set_cell_grey(c)
+            p = c.paragraphs[0]
+            if p.runs:
+                p.runs[0].bold = True
+                p.runs[0].font.name = 'Calibri'
+
+        for p_row in q['price_table']:
+            cells = p_table.add_row().cells
+            cells[0].text = str(p_row.get("Category", ""))
+            cells[1].text = f"{p_row.get('Cost', 0):,.2f}"
+            for c in cells:
+                for p in c.paragraphs:
+                    for r in p.runs: r.font.name = 'Calibri'
+
     # --- 6. TARIFF TABLE ---
     add_styled_heading('TARIFF IN USD')
-    t_table = doc.add_table(rows=2, cols=3)
+    
+    # PAX Logic updated for Total price only when children are present
+    has_kids = q.get('children_count', 0) > 0
+    t_table = doc.add_table(rows=2, cols=2 if has_kids else 3)
     t_table.style = 'Table Grid'
     t_table.alignment = WD_ALIGN_PARAGRAPH.LEFT
     t_table.width = content_width
 
-    # SHIFT TABLE RIGHT: Matching the shift for the itinerary table
+    # SHIFT TABLE RIGHT
     t_tbl_pr = t_table._element.xpath('w:tblPr')[0]
     t_tbl_ind = OxmlElement('w:tblInd')
     t_tbl_ind.set(qn('w:w'), '100') 
     t_tbl_ind.set(qn('w:type'), 'dxa')
     t_tbl_pr.append(t_tbl_ind)
 
-    # Header Row for Tariff with Grey BG
-    t_hdrs = ["Item", "Total Cost", "Cost per Person"]
+    # Header Row for Tariff
+    t_hdrs = ["Item", "Total Cost"]
+    if not has_kids: t_hdrs.append("Cost per Adult")
+    
     for i, h in enumerate(t_hdrs):
         cell = t_table.rows[0].cells[i]
         cell.text = h
-        set_cell_grey(cell) # Apply grey background
+        set_cell_grey(cell) 
         p = cell.paragraphs[0]
         if p.runs:
             p.runs[0].bold = True
             p.runs[0].font.name = 'Calibri'
 
     tr = t_table.rows[1].cells
-    tr[0].text = f"{q['adults']} PAX Safari"
+    total_participants = q['adults'] + q.get('children_count', 0)
+    tr[0].text = f"{total_participants} PAX Safari"
     tr[1].text = f"{q['total']:,.0f}"
-    tr[2].text = f"{q['pp']:,.0f}"
     
-    # Ensure Calibri for Tariff data
+    # Handle cost per adult key only if it exists (Fix for KeyError: 'pp')
+    if not has_kids and len(tr) > 2:
+        tr[2].text = f"{q.get('pp', 0):,.0f}"
+    
     for cell in tr:
         if cell.paragraphs[0].runs:
             cell.paragraphs[0].runs[0].font.name = 'Calibri'
-    # --- TARIFF SUMMARY SENTENCE ---
+
     # --- TARIFF SUMMARY SENTENCE ---
     summary_text = (
-        f"This price is for {q['adults']} adults traveling in {q['vehicles']} private "
+        f"This price is for {q['adults']} adults and {q.get('children_count', 0)} children traveling in {q['vehicles']} private "
         f"safari vehicle(s) with accommodation in {q['accommodation_summary']} "
         f"as per the itinerary above."
     )
     
-    # Check if there are extra items to add to the sentence
     if q.get('extras_summary'):
         summary_text += f" This price also includes {q['extras_summary']}."
     
@@ -242,127 +276,75 @@ def generate_word_quotation(q):
         add_styled_heading('DETAILED ITINERARY')
         
         for day_info in q['detailed_iti']:
-            # --- Day Title ---
             p_day = doc.add_paragraph()
             p_day.paragraph_format.space_before = Pt(10)
             p_day.paragraph_format.space_after = Pt(2)
-            p_day.paragraph_format.left_indent = Cm(0) 
-            
             run_day = p_day.add_run(f"{day_info['day']} :-")
             run_day.bold = True
             run_day.underline = True
             run_day.font.name = 'Calibri'
             run_day.font.size = Pt(11)
             
-            # --- Day Details (Justified Alignment) ---
             p_details = doc.add_paragraph(day_info['details'])
-            p_details.paragraph_format.space_after = Pt(12)
-            
-            # SET ALIGNMENT TO JUSTIFY
             p_details.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            
-            # Match table border alignment (0.12cm)
             p_details.paragraph_format.left_indent = Cm(0.12)
-            p_details.paragraph_format.right_indent = Cm(0)
-            
-            # Standard line spacing for readability
             p_details.paragraph_format.line_spacing = 1.15
             
             for run in p_details.runs:
                 run.font.name = 'Calibri'
                 run.font.size = Pt(10.5)
-                run.font.color.rgb = RGBColor(0, 0, 0)
-   
 
-    # --- 7. UPDATED INCLUSIONS ---
+    # --- 8. UPDATED INCLUSIONS ---
     add_styled_heading('INCLUSIONS')
     inclusions = [
         "Mid-Range accommodation with meal plans as stated in the itinerary",
         "Transport in a private vehicle & use of customized 4WD Land cruisers with a Driver/Guide",
-        "Game drive time of your choice, we can extend our support for full day game drive at no extra cost",
+        "Game drive time of your choice, support for full day game drive at no extra cost",
         "Drinking water on safari and transfers",
         "All National Parks entrance fees and Taxes"
     ]
-    for item in inclusions:
-        doc.add_paragraph(item, style='List Bullet')
+    for item in inclusions: doc.add_paragraph(item, style='List Bullet')
     
-    # --- 8. UPDATED EXCLUSIONS ---
+    # --- 9. UPDATED EXCLUSIONS ---
     add_styled_heading('EXCLUSIONS')
     exclusions = [
         "International/Domestic Flights/Visa and travel insurance",
-        "Yellow Fever Vaccination or travel related test (PCR etc if applicable)",
         "Alcoholic drinks or soft drinks",
-        "Items of personal nature",
-        "Extra accommodations in Nairobi",
-        "Extra meals in any location",
-        "Tips 10 USD per day per person for the driver (Optional but highly recommended in camps as well)",
-        
+        "Tips 10 USD per day per person for the driver",
+        "Items of personal nature"
     ]
-    for item in exclusions:
-        doc.add_paragraph(item, style='List Bullet')
-
+    for item in exclusions: doc.add_paragraph(item, style='List Bullet')
 
     doc.add_paragraph("\n\nThank you for Choosing Jaws Africa").alignment = WD_ALIGN_PARAGRAPH.CENTER
 
- # --- 8. FOOTER CODE ---
-
+    # --- 10. FOOTER CODE ---
     def setup_styled_footer(footer_obj):
         footer_obj.is_linked_to_previous = False
         f_para = footer_obj.paragraphs[0]
         f_para.clear()
-        
-        # 1. Create a 1x2 table inside the footer to force margins
-        # Using content_width (18.46cm) to match the body content exactly
         f_table = footer_obj.add_table(1, 2, width=content_width)
         f_table.allow_autofit = False
+        f_table.columns[0].width = Cm(13.0); f_table.columns[1].width = Cm(5.46)
         
-        # 2. Set column widths (Website gets 70%, Page Number gets 30%)
-        f_table.columns[0].width = Cm(13.0)
-        f_table.columns[1].width = Cm(5.46)
+        l_run = f_table.rows[0].cells[0].paragraphs[0].add_run("www.jawsafrica.com")
+        l_run.font.name = 'Calibri'; l_run.font.size = Pt(10)
         
-        # 3. Left Cell: Website URL
-        left_cell = f_table.rows[0].cells[0]
-        l_para = left_cell.paragraphs[0]
-        l_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        l_run = l_para.add_run("www.jawsafrica.com")
-        l_run.font.name = 'Calibri'
-        l_run.font.size = Pt(10)
+        r_para = f_table.rows[0].cells[1].paragraphs[0]
+        r_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT; r_para.add_run("Page ")
         
-        # 4. Right Cell: Page Number
-        right_cell = f_table.rows[0].cells[1]
-        r_para = right_cell.paragraphs[0]
-        r_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT # This forces it to the far right margin
-        r_para.add_run("Page ")
-        
-        # --- Dynamic Page Number Field ---
         f_p = r_para._p
-        f_run_field = OxmlElement('w:r')
-        f_fldChar_start = OxmlElement('w:fldChar')
-        f_fldChar_start.set(qn('w:fldCharType'), 'begin')
-        f_run_field.append(f_fldChar_start)
-        f_p.append(f_run_field)
+        for tag in ["begin", "PAGE", "end"]:
+            r = OxmlElement('w:r')
+            if tag in ["begin", "end"]:
+                fld = OxmlElement('w:fldChar'); fld.set(qn('w:fldCharType'), tag); r.append(fld)
+            else:
+                txt = OxmlElement('w:instrText'); txt.text = tag; r.append(txt)
+            f_p.append(r)
         
-        f_run_instr = OxmlElement('w:r')
-        f_instrText = OxmlElement('w:instrText')
-        f_instrText.text = "PAGE"
-        f_run_instr.append(f_instrText)
-        f_p.append(f_run_instr)
-        
-        f_run_end = OxmlElement('w:r')
-        f_fldChar_end = OxmlElement('w:fldChar')
-        f_fldChar_end.set(qn('w:fldCharType'), 'end')
-        f_run_end.append(f_fldChar_end)
-        f_p.append(f_run_end)
-        
-        # Set font for page number
-        for run in r_para.runs:
-            run.font.name = 'Calibri'
-            run.font.size = Pt(10)
+        for run in r_para.runs: run.font.name = 'Calibri'; run.font.size = Pt(10)
 
-    # Apply to both page versions
     setup_styled_footer(section.first_page_footer)
     setup_styled_footer(section.footer)
-
 
     buf = io.BytesIO()
     doc.save(buf)
