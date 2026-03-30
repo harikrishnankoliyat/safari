@@ -71,10 +71,7 @@ if app_page == "Logout":
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
-# --- 4. DATABASE SEARCH PAGE ---
-# --- 4. DATABASE SEARCH PAGE ---
-# --- 4. DATABASE SEARCH PAGE ---
-# --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE (FINAL FIXED TABLE) ---
 if app_page == "Search Database":
     st.title("📂 Quote Database")
     search_query = st.text_input("Search Client Name")
@@ -84,102 +81,106 @@ if app_page == "Search Database":
     db_results = search_quotes(search_query)
 
     if db_results:
-        # Start the scrollable wrapper
-        st.markdown('<div class="scroll-wrapper">', unsafe_allow_html=True)
-        
-        # We use standard columns but with manual control to prevent stacking
-        # Header
-        h1, h2, h3, h4, h5 = st.columns([0.5, 2, 2, 1.2, 1.2])
-        h1.write("**#**")
-        h2.write("**Client (Country)**")
-        h3.write("**Date**")
-        h4.write("**Action**")
-        if st.session_state.get("is_master"):
-            h5.write("**Admin**")
-        
-        st.markdown("<hr style='margin:0; border:1px solid #444;'>", unsafe_allow_html=True)
-
+        # 1. Prepare Data with "Select" columns
+        table_rows = []
         for i, row in enumerate(db_results):
-            # Each row is a set of columns. 
-            # Note: In Streamlit, columns WILL stack on mobile unless 
-            # the parent container (scroll-wrapper) allows overflow.
-            c1, c2, c3, c4, c5 = st.columns([0.5, 2, 2, 1.2, 1.2])
-            
-            c1.write(f"{i+1}")
-            c2.write(f"**{row[1]}** ({row[2]})")
-            c3.write(f"📅 {row[3]}")
-            
-            with c4:
-                if st.button(f"📥 Word", key=f"gen_{row[0]}"):
-                    saved_config = json.loads(row[4])
+            table_rows.append({
+                "#": i + 1,
+                "Client (Country)": f"{row[1]} ({row[2]})",
+                "Date": row[3].split(" ")[0],
+                "📄 Word": False,  # Checkbox acting as a button
+                "🗑️ Del": False,   # Checkbox acting as a button
+                "db_id": row[0],
+                "config": row[4]
+            })
+        
+        df = pd.DataFrame(table_rows)
+
+        # 2. Setup the Scrollable Table
+        # We use use_container_width=True to ensure it fits the screen
+        edited_df = st.data_editor(
+            df,
+            column_config={
+                "db_id": None, "config": None,  # Hide background data
+                "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
+                "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
+            },
+            disabled=["#", "Client (Country)", "Date"], # Only checkboxes are clickable
+            hide_index=True,
+            use_container_width=True,
+            key="db_table"
+        )
+
+        # 3. Handle Direct Clicks
+        # This logic runs immediately when a checkbox is clicked
+        if st.session_state.db_table:
+            edits = st.session_state.db_table.get("edited_rows", {})
+            for row_idx, changes in edits.items():
+                real_data = df.iloc[row_idx]
+                
+                # IF WORD CHECKED
+                if changes.get("📄 Word") == True:
+                    saved_config = json.loads(real_data['config'])
                     word_bytes = generate_word_quotation(saved_config)
-                    st.download_button("Download", word_bytes, file_name=f"Quote_{row[1]}.docx", key=f"dl_{row[0]}")
-            
-            with c5:
-                if st.session_state.get("is_master", False):
-                    if st.button(f"🗑️ Del", key=f"del_{row[0]}"):
-                        delete_quote(row[0])
+                    st.download_button(f"📥 Click to Save #{real_data['#']}", 
+                                     word_bytes, 
+                                     file_name=f"Quote_{real_data['Client (Country)']}.docx",
+                                     type="primary")
+                
+                # IF DELETE CHECKED
+                if changes.get("🗑️ Del") == True:
+                    if st.button(f"⚠️ Confirm Delete #{real_data['#']}?"):
+                        delete_quote(real_data['db_id'])
                         st.rerun()
-            st.markdown("<hr style='margin:0; border:0.5px solid #333;'>", unsafe_allow_html=True)
-            
-        st.markdown('</div>', unsafe_allow_html=True) 
-        st.caption("👈 Swipe left/right on mobile to see more")
+
     else:
         st.info("No quotes found.")
     st.stop()
+
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
 # --- CSS: PROFESSIONAL MOBILE-RESPONSIVE UI ---
-# --- CSS: FIXED TABLE UI (NO STACKING) ---
-# --- CSS: FIXED TABLE UI (NO STACKING) ---
-# --- CSS: PROFESSIONAL SCROLLING TABLE ---
-# --- CSS: FIXED HORIZONTAL SCROLL TABLE ---
 st.markdown("""
     <style>
+    /* HIDE STREAMLIT ANCHORS */
     a.header-anchor, .st-emotion-cache-15z92p2, [data-testid="stHeaderActionElements"] { 
         display: none !important; 
     }
 
-    /* Create a container that allows the table inside to be wider than the screen */
-    .scroll-wrapper {
-        overflow-x: auto;
-        border: 1px solid #444;
-        border-radius: 10px;
-        background-color: #1e1e1e;
-        margin-bottom: 20px;
-    }
-
-    /* Force the table to keep its structure and not stack */
-    .jaws-table {
-        width: 100%;
-        min-width: 600px; /* Forces scrolling on mobile */
-        border-collapse: collapse;
-        color: white;
-    }
-
-    .jaws-table th, .jaws-table td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid #444;
-        white-space: nowrap; /* Prevents text from breaking into 2 lines */
-    }
-
-    .jaws-table th { background-color: #2e2e2e; color: #FFC000; }
-
-    /* Total box scaling for mobile */
+    /* DESKTOP TOTAL BOX */
     .white-total-box {
-        background-color: #FFFFFF !important; padding: 40px 20px !important; 
-        border-radius: 30px !important; border: 4px solid #000000 !important;
-        text-align: center !important; margin: 30px auto !important;
-        width: 95% !important; box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
+        background-color: #FFFFFF !important;
+        padding: 40px 20px !important; 
+        border-radius: 30px !important;
+        border: 4px solid #000000 !important;
+        text-align: center !important;
+        margin: 30px auto !important;
+        width: 95% !important; 
+        box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
     }
     .total-title-text {
         color: #000000 !important; font-family: 'Calibri', sans-serif !important;
         font-weight: 900 !important; font-size: 55px !important;
     }
-    @media only screen and (max-width: 600px) {
-        .total-title-text { font-size: 26px !important; }
+
+    /* MOBILE RESPONSIVE RULES */
+    @media only screen and (max-width: 768px) {
+        /* Force the 5 columns to stack vertically on mobile */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
+        [data-testid="column"] {
+            width: 100% !important;
+            margin-bottom: 10px !important;
+        }
+        /* Make buttons fill the width of the phone */
+        .stButton button {
+            width: 100% !important;
+        }
+        /* Scale down the big total price for phone screens */
+        .total-title-text { font-size: 28px !important; }
+        .white-total-box { padding: 20px 10px !important; }
     }
     </style>
 """, unsafe_allow_html=True)
