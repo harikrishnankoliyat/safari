@@ -71,99 +71,115 @@ if app_page == "Logout":
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
 if app_page == "Search Database":
     st.title("📂 Quote Database")
     search_query = st.text_input("Search Client Name")
-    import json
     from database import delete_quote, search_quotes
-    
+    import json
+
     db_results = search_quotes(search_query)
-    
+
     if db_results:
-        # Header Row for Desktop
-        if not st.session_state.get('mobile_view'):
-             h1, h2, h3, h4, h5 = st.columns([0.5, 2.5, 2, 1.5, 1.5])
-             h1.write("**#**")
-             h2.write("**Client (Country)**")
-             h3.write("**Date**")
-             st.divider()
+        # Start the scrollable wrapper
+        st.markdown('<div class="scroll-wrapper">', unsafe_allow_html=True)
+        
+        # We use standard columns but with manual control to prevent stacking
+        # Header
+        h1, h2, h3, h4, h5 = st.columns([0.5, 2, 2, 1.2, 1.2])
+        h1.write("**#**")
+        h2.write("**Client (Country)**")
+        h3.write("**Date**")
+        h4.write("**Action**")
+        if st.session_state.get("is_master"):
+            h5.write("**Admin**")
+        
+        st.markdown("<hr style='margin:0; border:1px solid #444;'>", unsafe_allow_html=True)
 
         for i, row in enumerate(db_results):
-            with st.container():
-                c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 2, 1.5, 1.5])
-                
-                # Column 1: Serial Number
-                c1.write(f"**{i+1}**") 
-                
-                # Column 2: Name and Country
-                c2.write(f"**{row[1]}** ({row[2]})")
-                
-                # Column 3: Date
-                c3.write(f"📅 {row[3]}")
-                
-                # Column 4: Generate Button
-                if c4.button(f"📥 Generate Word", key=f"gen_{row[0]}"):
+            # Each row is a set of columns. 
+            # Note: In Streamlit, columns WILL stack on mobile unless 
+            # the parent container (scroll-wrapper) allows overflow.
+            c1, c2, c3, c4, c5 = st.columns([0.5, 2, 2, 1.2, 1.2])
+            
+            c1.write(f"{i+1}")
+            c2.write(f"**{row[1]}** ({row[2]})")
+            c3.write(f"📅 {row[3]}")
+            
+            with c4:
+                if st.button(f"📥 Word", key=f"gen_{row[0]}"):
                     saved_config = json.loads(row[4])
                     word_bytes = generate_word_quotation(saved_config)
                     st.download_button("Download", word_bytes, file_name=f"Quote_{row[1]}.docx", key=f"dl_{row[0]}")
-                
-                # Column 5: Delete Button (Only for Master)
+            
+            with c5:
                 if st.session_state.get("is_master", False):
-                    if c5.button(f"🗑️ Delete", key=f"del_{row[0]}"):
-                        delete_quote(row[0]) 
-                        st.success(f"Deleted {row[1]}")
+                    if st.button(f"🗑️ Del", key=f"del_{row[0]}"):
+                        delete_quote(row[0])
                         st.rerun()
-                # No "Else" here means jawsadmin sees a clean empty space
-                
-                st.divider()
+            st.markdown("<hr style='margin:0; border:0.5px solid #333;'>", unsafe_allow_html=True)
+            
+        st.markdown('</div>', unsafe_allow_html=True) 
+        st.caption("👈 Swipe left/right on mobile to see more")
     else:
         st.info("No quotes found.")
     st.stop()
-
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
 # --- CSS: PROFESSIONAL MOBILE-RESPONSIVE UI ---
+# --- CSS: FIXED TABLE UI (NO STACKING) ---
+# --- CSS: FIXED TABLE UI (NO STACKING) ---
+# --- CSS: PROFESSIONAL SCROLLING TABLE ---
+# --- CSS: FIXED HORIZONTAL SCROLL TABLE ---
 st.markdown("""
     <style>
-    /* HIDE STREAMLIT ANCHORS */
     a.header-anchor, .st-emotion-cache-15z92p2, [data-testid="stHeaderActionElements"] { 
         display: none !important; 
     }
 
-    /* DESKTOP TOTAL BOX */
+    /* Create a container that allows the table inside to be wider than the screen */
+    .scroll-wrapper {
+        overflow-x: auto;
+        border: 1px solid #444;
+        border-radius: 10px;
+        background-color: #1e1e1e;
+        margin-bottom: 20px;
+    }
+
+    /* Force the table to keep its structure and not stack */
+    .jaws-table {
+        width: 100%;
+        min-width: 600px; /* Forces scrolling on mobile */
+        border-collapse: collapse;
+        color: white;
+    }
+
+    .jaws-table th, .jaws-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #444;
+        white-space: nowrap; /* Prevents text from breaking into 2 lines */
+    }
+
+    .jaws-table th { background-color: #2e2e2e; color: #FFC000; }
+
+    /* Total box scaling for mobile */
     .white-total-box {
-        background-color: #FFFFFF !important;
-        padding: 40px 20px !important; 
-        border-radius: 30px !important;
-        border: 4px solid #000000 !important;
-        text-align: center !important;
-        margin: 30px auto !important;
-        width: 95% !important; 
-        box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
+        background-color: #FFFFFF !important; padding: 40px 20px !important; 
+        border-radius: 30px !important; border: 4px solid #000000 !important;
+        text-align: center !important; margin: 30px auto !important;
+        width: 95% !important; box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
     }
     .total-title-text {
         color: #000000 !important; font-family: 'Calibri', sans-serif !important;
         font-weight: 900 !important; font-size: 55px !important;
     }
-
-    /* MOBILE RESPONSIVE RULES */
-    @media only screen and (max-width: 768px) {
-        /* Force the 5 columns to stack vertically on mobile */
-        [data-testid="stHorizontalBlock"] {
-            flex-direction: column !important;
-        }
-        [data-testid="column"] {
-            width: 100% !important;
-            margin-bottom: 10px !important;
-        }
-        /* Make buttons fill the width of the phone */
-        .stButton button {
-            width: 100% !important;
-        }
-        /* Scale down the big total price for phone screens */
-        .total-title-text { font-size: 28px !important; }
-        .white-total-box { padding: 20px 10px !important; }
+    @media only screen and (max-width: 600px) {
+        .total-title-text { font-size: 26px !important; }
     }
     </style>
 """, unsafe_allow_html=True)
