@@ -69,6 +69,8 @@ if app_page == "Logout":
     st.rerun()
 
 # --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
+# --- 4. DATABASE SEARCH PAGE ---
 if app_page == "Search Database":
     st.title("📂 Quote Database")
     search_query = st.text_input("Search Client Name")
@@ -78,49 +80,58 @@ if app_page == "Search Database":
     db_results = search_quotes(search_query)
     
     if db_results:
-        # We use enumerate to create a Serial Number (i+1)
+        # Header Row for Desktop
+        if not st.session_state.get('mobile_view'):
+             h1, h2, h3, h4, h5 = st.columns([0.5, 2.5, 2, 1.5, 1.5])
+             h1.write("**#**")
+             h2.write("**Client (Country)**")
+             h3.write("**Date**")
+             st.divider()
+
         for i, row in enumerate(db_results):
             with st.container():
                 c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 2, 1.5, 1.5])
                 
-                # Use (i+1) for the Serial Number instead of row[0]
+                # Column 1: Serial Number
                 c1.write(f"**{i+1}**") 
+                
+                # Column 2: Name and Country
                 c2.write(f"**{row[1]}** ({row[2]})")
+                
+                # Column 3: Date
                 c3.write(f"📅 {row[3]}")
                 
-                # Re-generate logic
+                # Column 4: Generate Button
                 if c4.button(f"📥 Generate Word", key=f"gen_{row[0]}"):
                     saved_config = json.loads(row[4])
                     word_bytes = generate_word_quotation(saved_config)
                     st.download_button("Download", word_bytes, file_name=f"Quote_{row[1]}.docx", key=f"dl_{row[0]}")
                 
-                # Master Admin Delete
+                # Column 5: Delete Button (Only for Master)
                 if st.session_state.get("is_master", False):
-                    # Keep using row[0] for the function call so the database knows exactly which one to delete
                     if c5.button(f"🗑️ Delete", key=f"del_{row[0]}"):
                         delete_quote(row[0]) 
-                        st.success(f"Deleted quote for {row[1]}")
+                        st.success(f"Deleted {row[1]}")
                         st.rerun()
-                else:
-                    c5.write("🔒 Restricted")
-                st.divider()
+                # No "Else" here means jawsadmin sees a clean empty space
                 
                 st.divider()
     else:
-        st.info("No quotes found in database.")
+        st.info("No quotes found.")
     st.stop()
 
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
+# --- CSS: PROFESSIONAL MOBILE-RESPONSIVE UI ---
 st.markdown("""
     <style>
-    a.header-anchor, 
-    .st-emotion-cache-15z92p2, 
-    [data-testid="stHeaderActionElements"] { 
+    /* HIDE STREAMLIT ANCHORS */
+    a.header-anchor, .st-emotion-cache-15z92p2, [data-testid="stHeaderActionElements"] { 
         display: none !important; 
     }
-    [data-testid="stHeaderActionElements"] { display: none !important; }
+
+    /* DESKTOP TOTAL BOX */
     .white-total-box {
         background-color: #FFFFFF !important;
         padding: 40px 20px !important; 
@@ -130,26 +141,29 @@ st.markdown("""
         margin: 30px auto !important;
         width: 95% !important; 
         box-shadow: 0px 20px 50px rgba(0,0,0,0.1);
-        display: block !important;
     }
     .total-title-text {
-        color: #000000 !important;
-        font-family: 'Calibri', sans-serif !important;
-        font-weight: 900 !important;
-        font-size: 55px !important;
-        display: block !important;
-        white-space: nowrap !important;
+        color: #000000 !important; font-family: 'Calibri', sans-serif !important;
+        font-weight: 900 !important; font-size: 55px !important;
     }
-    .per-person-text {
-        color: #444444 !important; 
-        font-family: 'Calibri', sans-serif !important; 
-        font-weight: bold !important;
-        font-size: 32px !important;
-    }
-    .indent { margin-left: 40px; padding-left: 20px; border-left: 2px dotted #000; margin-bottom: 20px; }
-    @media only screen and (max-width: 800px) {
-        .total-title-text { font-size: 26px !important; white-space: normal !important;}
-        .per-person-text { font-size: 18px !important; }
+
+    /* MOBILE RESPONSIVE RULES */
+    @media only screen and (max-width: 768px) {
+        /* Force the 5 columns to stack vertically on mobile */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
+        [data-testid="column"] {
+            width: 100% !important;
+            margin-bottom: 10px !important;
+        }
+        /* Make buttons fill the width of the phone */
+        .stButton button {
+            width: 100% !important;
+        }
+        /* Scale down the big total price for phone screens */
+        .total-title-text { font-size: 28px !important; }
+        .white-total-box { padding: 20px 10px !important; }
     }
     </style>
 """, unsafe_allow_html=True)
