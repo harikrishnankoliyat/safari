@@ -467,20 +467,35 @@ if st.session_state.get('calculation_ready'):
     st.subheader("📋 Detailed Price Table (Editable)")
     edited_price_table = st.data_editor(st.session_state.last_quote['price_table'], num_rows="dynamic")
     include_price_table = st.checkbox("Include Price Table in Word File")
+
+    # --- NEW: DETAILED ITINERARY OPTION (ADDED BACK) ---
+    with st.expander("🐾 Detailed Itinerary (Optional)", expanded=False):
+        if 'detailed_iti' not in st.session_state: st.session_state.detailed_iti = [] 
+        def add_iti_day(): st.session_state.detailed_iti.append({'day': f"Day {len(st.session_state.detailed_iti)+1}", 'details': ''})
+        def remove_iti_day(index): st.session_state.detailed_iti.pop(index)
+        for i, day_item in enumerate(st.session_state.detailed_iti):
+            col1, col2, col3 = st.columns([1, 4, 0.5])
+            with col1: day_item['day'] = st.text_input("Label", value=day_item['day'], key=f"det_day_{i}")
+            with col2: day_item['details'] = st.text_area("Description", value=day_item['details'], key=f"det_desc_{i}")
+            with col3: 
+                if st.button("🗑️", key=f"rem_det_{i}"): remove_iti_day(i); st.rerun()
+        st.button("➕ Add Day", on_click=add_iti_day)
     
     if st.button("📝 Prepare Word Document"):
         q = st.session_state.last_quote
         q['client'] = client_name
         q['iti'] = edited_iti
         q['price_table'] = edited_price_table if include_price_table else None
+        # Add the detailed itinerary data to the dictionary passed to generate_word_quotation
+        q['detailed_iti'] = [d for d in st.session_state.detailed_iti if d['details'].strip()]
         
         # Word Summary Strings
         stay_details = []
         for camp in camp_data:
             rooms = []
-            if camp['assignments']['Single']: rooms.append(f"{len(camp['assignments']['Single'])} Single")
-            if camp['assignments']['Double']: rooms.append(f"{len(camp['assignments']['Double'])} Double")
-            if camp['assignments']['Triple']: rooms.append(f"{len(camp['assignments']['Triple'])} Triple")
+            if camp['assignments']['Single']: rooms.append(f"{len(camp['assignments']['Single'])} Single Room(s)")
+            if camp['assignments']['Double']: rooms.append(f"{len(camp['assignments']['Double'])} Double Room(s)")
+            if camp['assignments']['Triple']: rooms.append(f"{len(camp['assignments']['Triple'])} Triple Room(s)")
             room_str = ", ".join(rooms[:-1]) + " and " + rooms[-1] if len(rooms) > 1 else (rooms[0] if rooms else "")
             stay_details.append(f"{room_str} at {camp['prop']} for {camp['nights']} night(s)")
         q['accommodation_summary'] = ", ".join(stay_details)
