@@ -4,24 +4,122 @@ from datetime import timedelta, datetime
 import os
 import math
 import io
+import time
 # NEW: Import the Word logic from your second file
 from file import generate_word_quotation
+# NEW: Import Database logic
+from database import init_db, save_quote_data, search_quotes, delete_quote
 
+# --- INITIALIZE DATABASE ---
+init_db()
 
-# --- 1. Define the Mapping (Place this at the top of your file) ---
+# --- 1. Define the Mapping ---
 AIRPORT_MAP = {
     "Kenya": "Nairobi",
     "Tanzania": "Kilimanjaro",
     "Uganda": "Entebbe",
     "Rwanda": "Kigali"
 }
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Jaws Africa Safari Planner", layout="wide")
+
+# --- 2. LOGIN & SESSION TIMEOUT LOGIC ---
+def check_timeout():
+    if "last_activity" in st.session_state:
+        # 15 minutes = 900 seconds
+        if time.time() - st.session_state.last_activity > 900:
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.warning("⚠️ Session expired due to 15 minutes of inactivity. Please login again.")
+            st.stop()
+        else:
+            st.session_state.last_activity = time.time()
+
+if "logged_in" not in st.session_state:
+    st.title("🔐 Jaws Africa Admin Login")
+    u_input = st.text_input("Username")
+    p_input = st.text_input("Password", type="password")
+    if st.button("Login"):
+        # MASTER ADMIN: Set is_master to True
+        if u_input == "masteradmin" and p_input == "MasterPassword123":
+            st.session_state.logged_in = True
+            st.session_state.is_master = True 
+            st.session_state.last_activity = time.time()
+            st.rerun()
+        # REGULAR ADMIN: Set is_master to False
+        elif u_input == "jawsadmin" and p_input == "Lorkulup":
+            st.session_state.logged_in = True
+            st.session_state.is_master = False
+            st.session_state.last_activity = time.time()
+            st.rerun()
+        else:
+            st.error("❌ Invalid Username or Password")
+    st.stop()
+
+check_timeout()
+
+# --- 3. NAVIGATION ---
+st.sidebar.title("Menu")
+app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
+
+if app_page == "Logout":
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
+# --- 4. DATABASE SEARCH PAGE ---
+if app_page == "Search Database":
+    st.title("📂 Quote Database")
+    search_query = st.text_input("Search Client Name")
+    import json
+    from database import delete_quote, search_quotes
+    
+    db_results = search_quotes(search_query)
+    
+    if db_results:
+        # We use enumerate to create a Serial Number (i+1)
+        for i, row in enumerate(db_results):
+            with st.container():
+                c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 2, 1.5, 1.5])
+                
+                # Use (i+1) for the Serial Number instead of row[0]
+                c1.write(f"**{i+1}**") 
+                c2.write(f"**{row[1]}** ({row[2]})")
+                c3.write(f"📅 {row[3]}")
+                
+                # Re-generate logic
+                if c4.button(f"📥 Generate Word", key=f"gen_{row[0]}"):
+                    saved_config = json.loads(row[4])
+                    word_bytes = generate_word_quotation(saved_config)
+                    st.download_button("Download", word_bytes, file_name=f"Quote_{row[1]}.docx", key=f"dl_{row[0]}")
+                
+                # Master Admin Delete
+                if st.session_state.get("is_master", False):
+                    # Keep using row[0] for the function call so the database knows exactly which one to delete
+                    if c5.button(f"🗑️ Delete", key=f"del_{row[0]}"):
+                        delete_quote(row[0]) 
+                        st.success(f"Deleted quote for {row[1]}")
+                        st.rerun()
+                else:
+                    c5.write("🔒 Restricted")
+                st.divider()
+                
+                st.divider()
+    else:
+        st.info("No quotes found in database.")
+    st.stop()
+
+# --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
 st.markdown("""
     <style>
-    a.header-anchor { display: none !important; }
+    a.header-anchor, 
+    .st-emotion-cache-15z92p2, 
+    [data-testid="stHeaderActionElements"] { 
+        display: none !important; 
+    }
     [data-testid="stHeaderActionElements"] { display: none !important; }
     .white-total-box {
         background-color: #FFFFFF !important;
@@ -107,6 +205,7 @@ if selected_country:
             
             # --- 3. TRAVELERS & DATES ---
             st.subheader("3. Travelers, Dates & Vehicles")
+            client_name = st.text_input("Client Name", value="Guest")
             
             # Row 1: Dates (Start Left, End Right)
             d_col1, d_col2 = st.columns(2)
@@ -320,13 +419,13 @@ if selected_country:
                                         if len(assignments) > 0 and (pd.isna(adult_rate_pp) or adult_rate_pp == 0):
                                             st.error(f"❌ Rate missing for {r_type} room at {camp['prop']}"); st.stop()
 
-                                        adults_in_this_type = 0
+                                        adults_this_type = 0
                                         for room_pax_list in assignments:
                                             # Adults logic
                                             adults_in_room = [p for p in room_pax_list if "Adult" in p]
                                             for a in adults_in_room:
                                                 indiv_costs[a]['acc'] += adult_rate_pp
-                                                adults_in_this_type += 1
+                                                adults_this_type += 1
                                                 day_total_acc_cost += adult_rate_pp
 
                                             # Children logic
@@ -344,8 +443,8 @@ if selected_country:
                                                 child_id = person.split(" (")[0]
                                                 detailed_math_parts.append(f"{child_id} ({factor} * ${adult_rate_pp:,.0f})")
 
-                                        if adults_in_this_type > 0:
-                                            detailed_math_parts.insert(0, f"{adults_in_this_type} Adult(s) in {r_type} (@ ${adult_rate_pp:,.0f})")
+                                        if adults_this_type > 0:
+                                            detailed_math_parts.insert(0, f"{adults_this_type} Adult(s) in {r_type} (@ ${adult_rate_pp:,.0f})")
 
                                     math_string = " + ".join(detailed_math_parts)
 
@@ -424,6 +523,11 @@ if selected_country:
 
                             grand_total = sum(r['Cost'] for r in price_table_data)
 
+                            country_part = selected_country[:3].upper()
+                            name_part = client_name[:3].replace(" ", "").upper() if 'client_name' in locals() else "GUE"
+                            date_part = travel_start.strftime('%d%m%Y')
+                            tour_code = f"{country_part}-{name_part}-{date_part}"
+
                             st.session_state.last_quote = {
                                 "total": grand_total, 
                                 "pp": grand_total/num_adults if not has_children == "Yes" else 0, # Placeholder, updated in file.py logic
@@ -437,7 +541,7 @@ if selected_country:
                                 "pkg": f"{total_days_veh}D/{total_nights}N", 
                                 "vehicles": num_vehicles, 
                                 "accommodation_summary": "",
-                                "code": f"QT-{datetime.now().strftime('%d%m%Y')}"
+                                "code": tour_code
                             }
                             st.session_state.calculation_ready = True
                             
@@ -460,7 +564,6 @@ if selected_country:
 if st.session_state.get('calculation_ready'):
     st.divider()
     st.subheader("📋 Itinerary Table")
-    client_name = st.text_input("Client Name", "Guest")
     edited_iti = st.data_editor(st.session_state.last_quote['iti'], num_rows="dynamic")
     
     # --- NEW EDITABLE PRICE TABLE ---
@@ -468,7 +571,7 @@ if st.session_state.get('calculation_ready'):
     edited_price_table = st.data_editor(st.session_state.last_quote['price_table'], num_rows="dynamic")
     include_price_table = st.checkbox("Include Price Table in Word File")
 
-    # --- NEW: DETAILED ITINERARY OPTION (ADDED BACK) ---
+    # --- NEW: DETAILED ITINERARY OPTION ---
     with st.expander("🐾 Detailed Itinerary (Optional)", expanded=False):
         if 'detailed_iti' not in st.session_state: st.session_state.detailed_iti = [] 
         def add_iti_day(): st.session_state.detailed_iti.append({'day': f"Day {len(st.session_state.detailed_iti)+1}", 'details': ''})
@@ -486,7 +589,6 @@ if st.session_state.get('calculation_ready'):
         q['client'] = client_name
         q['iti'] = edited_iti
         q['price_table'] = edited_price_table if include_price_table else None
-        # Add the detailed itinerary data to the dictionary passed to generate_word_quotation
         q['detailed_iti'] = [d for d in st.session_state.detailed_iti if d['details'].strip()]
         
         # Word Summary Strings
@@ -504,5 +606,21 @@ if st.session_state.get('calculation_ready'):
         q['extras_summary'] = ", ".join(extra_names[:-1]) + " and " + extra_names[-1] if len(extra_names) > 1 else (extra_names[0] if extra_names else "")
         
         word_bytes = generate_word_quotation(q)
-        st.success("✅ Quotation Generated Successfully!")
+        
+        # --- SAVE TO DATABASE ---
+        from database import save_quote_data
+        # We now save the data (q) instead of the file (word_bytes) to save Railway costs
+        # Use the new name and pass the 'q' dictionary instead of 'word_bytes'
+        save_quote_data(client_name, selected_country, q)
+        
+        st.success("✅ Quotation Generated & Saved to Database!")
         st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx")
+
+    st.divider()
+    if st.button("🔄 Start New Quote (Clear All)"):
+        # Keep login/activity but wipe rest
+        keys_to_keep = ['logged_in', 'last_activity']
+        for k in list(st.session_state.keys()):
+            if k not in keys_to_keep:
+                del st.session_state[k]
+        st.rerun()
