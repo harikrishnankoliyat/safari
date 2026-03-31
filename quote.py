@@ -76,7 +76,7 @@ if app_page == "Logout":
 if app_page == "Search Database":
     st.title("📂 Quote Database")
     search_query = st.text_input("Search Client Name")
-    from database import delete_quote, search_quotes, DB_PATH # Imported DB_PATH for backup
+    from database import delete_quote, search_quotes# Imported DB_PATH for backup
     import json
 
     db_results = search_quotes(search_query)
@@ -131,7 +131,7 @@ if app_page == "Search Database":
                 
                 # IF DELETE CHECKED
                 if changes.get("🗑️ Del") == True:
-                    if st.button(f"⚠️ Confirm Delete {real_data['Client (Country)']}?"):
+                    if st.button(f"⚠️ Confirm Delete #{real_data['#']}?"):
                         delete_quote(real_data['db_id'])
                         st.rerun()
 
@@ -139,18 +139,7 @@ if app_page == "Search Database":
         st.info("No quotes found.")
 
     # --- NEW: DATABASE MAINTENANCE (BACKUP) ---
-    if st.session_state.get("is_master"):
-        st.divider()
-        st.subheader("🛠️ Database Maintenance")
-        if os.path.exists(DB_PATH):
-            with open(DB_PATH, 'rb') as f:
-                st.download_button(
-                    label="📥 Download Database Backup (.db)",
-                    data=f,
-                    file_name=f"jaws_africa_backup_{datetime.now().strftime('%Y%m%d')}.db",
-                    mime="application/x-sqlite3"
-                )
-    st.stop()
+    
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
