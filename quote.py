@@ -60,23 +60,19 @@ if "logged_in" not in st.session_state:
 check_timeout()
 
 # --- 3. NAVIGATION ---
-# --- 3. NAVIGATION ---
-# --- 3. NAVIGATION ---
 st.sidebar.title("Menu")
 app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
 
-# ONLY clear data if we are switching FROM the Database BACK TO Create Quote
-if "previous_page" not in st.session_state:
-    st.session_state.previous_page = app_page
-
-if app_page == "Create Quote" and st.session_state.previous_page == "Search Database":
-    keys_to_keep = ['logged_in', 'last_activity', 'is_master']
-    for key in list(st.session_state.keys()):
-        if key not in keys_to_keep:
-            del st.session_state[key]
-    st.session_state.camps_count = 1
-
-st.session_state.previous_page = app_page
+# NEW: Logic to clear data when switching to "Create Quote"
+if app_page == "Create Quote":
+    # If a quote calculation was previously ready, clear it to start fresh
+    if st.session_state.get('calculation_ready'):
+        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
+        # Ensure the fresh start includes the first camp
+        st.session_state.camps_count = 1
 
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
@@ -92,33 +88,30 @@ if app_page == "Search Database":
     db_results = search_quotes(search_query)
 
     if db_results:
+        # 1. Prepare Data with "Select" columns
         table_rows = []
-        for row in db_results:
-            # Parse the config string to get the Tour Code
-            config_data = json.loads(row[4])
-            tour_code = config_data.get('code', 'N/A')
-            
+        for i, row in enumerate(db_results):
             table_rows.append({
-                "Tour Code": tour_code, # Replaces the # column
+                "#": i + 1,
                 "Client (Country)": f"{row[1]} ({row[2]})",
                 "Date": row[3].split(" ")[0],
-                "📄 Word": False,
-                "🗑️ Del": False,
+                "📄 Word": False,  # Checkbox acting as a button
+                "🗑️ Del": False,   # Checkbox acting as a button
                 "db_id": row[0],
                 "config": row[4]
             })
         
         df = pd.DataFrame(table_rows)
 
-        # Update data_editor column_config
+        # 2. Setup the Scrollable Table
         edited_df = st.data_editor(
             df,
             column_config={
-                "db_id": None, "config": None,
+                "db_id": None, "config": None,  # Hide background data
                 "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
                 "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
             },
-            disabled=["Tour Code", "Client (Country)", "Date"], 
+            disabled=["#", "Client (Country)", "Date"], 
             hide_index=True,
             use_container_width=True,
             key="db_table"
@@ -615,8 +608,6 @@ if selected_country:
                             
                         except Exception as e:
                             st.error(f"Error: {e}")
-                    st.session_state.calculation_ready = True
-                    st.session_state.last_quote = q # Ensure the quote data is saved
 
 if st.session_state.get('calculation_ready'):
     st.divider()
@@ -626,8 +617,7 @@ if st.session_state.get('calculation_ready'):
     # --- NEW EDITABLE PRICE TABLE ---
     st.subheader("📋 Detailed Price Table (Editable)")
     edited_price_table = st.data_editor(st.session_state.last_quote['price_table'], num_rows="dynamic")
-    # Change this line in your code
-    include_price_table = st.checkbox("Include Price Table in Word File", key="include_price_table_val")
+    include_price_table = st.checkbox("Include Price Table in Word File")
 
     # --- NEW: DETAILED ITINERARY OPTION ---
     with st.expander("🐾 Detailed Itinerary (Optional)", expanded=False):
@@ -675,19 +665,19 @@ if st.session_state.get('calculation_ready'):
         st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx")
 
     st.divider()
-    st.divider()
     if st.button("🔄 Start New Quote (Clear All)"):
-        # 1. Define the keys we MUST keep to stay logged in
+        # 1. Define the keys we want to keep (Login info)
         keys_to_keep = ['logged_in', 'last_activity', 'is_master']
         
-        # 2. Delete every other key in the session state
-        # This removes country selection, park checkboxes, and all calculation data
+        # 2. Clear everything else from session state
         for key in list(st.session_state.keys()):
             if key not in keys_to_keep:
+                # This specifically removes park selections, 
+                # country selections, and calculated quote data
                 del st.session_state[key]
         
-        # 3. Explicitly reset the camp/lodge counter to 1
+        # 3. Reset the camp count to 1 for the next user
         st.session_state.camps_count = 1
         
-        # 4. Refresh the app to show the blank initial screen
+        # 4. Force the app to rerun from the top
         st.rerun()
