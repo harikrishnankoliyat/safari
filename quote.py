@@ -61,19 +61,22 @@ check_timeout()
 
 # --- 3. NAVIGATION ---
 # --- 3. NAVIGATION ---
+# --- 3. NAVIGATION ---
 st.sidebar.title("Menu")
 app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
 
-# NEW: Logic to clear data when switching to "Create Quote"
-if app_page == "Create Quote":
-    # If a quote calculation was previously ready, clear it to start fresh
-    if st.session_state.get('calculation_ready'):
-        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
-        for key in list(st.session_state.keys()):
-            if key not in keys_to_keep:
-                del st.session_state[key]
-        # Ensure the fresh start includes the first camp
-        st.session_state.camps_count = 1
+# ONLY clear data if we are switching FROM the Database BACK TO Create Quote
+if "previous_page" not in st.session_state:
+    st.session_state.previous_page = app_page
+
+if app_page == "Create Quote" and st.session_state.previous_page == "Search Database":
+    keys_to_keep = ['logged_in', 'last_activity', 'is_master']
+    for key in list(st.session_state.keys()):
+        if key not in keys_to_keep:
+            del st.session_state[key]
+    st.session_state.camps_count = 1
+
+st.session_state.previous_page = app_page
 
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
@@ -612,6 +615,8 @@ if selected_country:
                             
                         except Exception as e:
                             st.error(f"Error: {e}")
+                    st.session_state.calculation_ready = True
+                    st.session_state.last_quote = q # Ensure the quote data is saved
 
 if st.session_state.get('calculation_ready'):
     st.divider()
@@ -621,7 +626,8 @@ if st.session_state.get('calculation_ready'):
     # --- NEW EDITABLE PRICE TABLE ---
     st.subheader("📋 Detailed Price Table (Editable)")
     edited_price_table = st.data_editor(st.session_state.last_quote['price_table'], num_rows="dynamic")
-    include_price_table = st.checkbox("Include Price Table in Word File")
+    # Change this line in your code
+    include_price_table = st.checkbox("Include Price Table in Word File", key="include_price_table_val")
 
     # --- NEW: DETAILED ITINERARY OPTION ---
     with st.expander("🐾 Detailed Itinerary (Optional)", expanded=False):
