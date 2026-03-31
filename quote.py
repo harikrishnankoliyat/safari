@@ -209,6 +209,19 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    /* Custom style for Section Numbers/Titles */
+    .section-header {
+        font-family: 'Calibri', sans-serif !important;
+        font-size: 24px !important;
+        font-weight: 700 !important;
+        color: #FFFFFF !important;
+        margin-top: 20px !important;
+        margin-bottom: 10px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- UTILITY FUNCTIONS ---
 def get_available_countries():
@@ -239,14 +252,20 @@ if not available_countries:
     st.error("No Excel files found.")
     st.stop()
 
-selected_country = st.selectbox("1. Select Destination Country", options=available_countries, index=None, placeholder="Select a Country")
+st.markdown('<p class="section-header">1. Select Destination Country</p>', unsafe_allow_html=True)
+selected_country = st.selectbox(
+    "Destination", # This label will be hidden
+    options=available_countries, 
+    index=None, 
+    label_visibility="collapsed" 
+)
 
 if selected_country:
     data = load_country_data(selected_country)
     if data:
         df_acc, df_park, df_comm, df_veh, df_child_policy = data
 
-        st.subheader("2. Select Parks/Locations")
+        st.markdown('<p class="section-header">2. Select Parks/Locations</p>', unsafe_allow_html=True)
         all_parks = sorted(df_acc['Location'].unique().tolist())
         selected_parks = []
         cols = st.columns(3)
@@ -260,7 +279,7 @@ if selected_country:
             st.divider()
             
             # --- 3. TRAVELERS & DATES ---
-            st.subheader("3. Travelers, Dates & Vehicles")
+            st.markdown('<p class="section-header">3. Travelers, Dates & Vehicles</p>', unsafe_allow_html=True)
             client_name = st.text_input("Client Name", value="Guest")
             
             # Row 1: Dates (Start Left, End Right)
@@ -324,7 +343,7 @@ if selected_country:
                 st.caption(f"Calculated for {total_veh_pax} total travelers requiring seats.")
 
             # --- 4. ACCOMMODATION PLANNING ---
-            st.subheader("4. Accommodation & Room Configuration")
+            st.markdown('<p class="section-header">4. Accommodation & Room Configuration</p>', unsafe_allow_html=True)
             if 'camps_count' not in st.session_state: st.session_state.camps_count = 1
             
             pax_needing_rooms = adult_names + [c["id"] for c in child_data]
@@ -406,7 +425,7 @@ if selected_country:
                 st.divider()
                 
                 # --- 5. ADDITIONAL CHARGES (UPDATED UI) ---
-                st.subheader("5. Additional Charges")
+                st.markdown('<p class="section-header">5. Additional Charges</p>', unsafe_allow_html=True)
                 if 'extra_items' not in st.session_state:
                     st.session_state.extra_items = [{'name': '', 'a_price': 0.0, 'c_price': 0.0, 'a_sel': [], 'c_sel': [], 'dyn_c': False, 'dyn_prices': {}}]
 
