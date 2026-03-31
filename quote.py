@@ -123,16 +123,18 @@ if app_page == "Search Database":
 
         # Update data_editor column_config
         edited_df = st.data_editor(
-            df,
-            column_config={
-                "db_id": None, "config": None,
-                "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
-                "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
-            },
-            disabled=["Tour Code", "Client (Country)", "Date"], 
-            hide_index=True,
-            use_container_width=True,
-            key="db_table"
+        df,
+        column_config={
+            "db_id": None, 
+            "config": None, 
+            "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
+            "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
+        },
+        # Ensure these are set
+        disabled=["#", "Tour Code", "Client (Country)", "Date"], 
+        hide_index=True,
+        use_container_width=True,
+        key="db_table"
         )
 
         # 3. Handle Direct Clicks
@@ -222,6 +224,19 @@ st.markdown("""
         color: #FFFFFF !important;
         margin-top: 20px !important;
         margin-bottom: 10px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    /* Hides the floating toolbar (eye, download, search, etc.) */
+    [data-testid="stElementToolbar"] {
+        display: none !important;
+    }
+    
+    /* Optional: Hides the 'Edit' pencil icon if you want a read-only look */
+    button[title="Edit"] {
+        display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
