@@ -126,7 +126,7 @@ if app_page == "Search Database":
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
-            selection_mode="single_row"
+            selection_mode="single-row"
         )
 
         # 3. Handle Actions based on Selection
