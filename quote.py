@@ -63,16 +63,10 @@ check_timeout()
 st.sidebar.title("Menu")
 app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
 
-# NEW: Logic to clear data when switching to "Create Quote"
-if app_page == "Create Quote":
-    # If a quote calculation was previously ready, clear it to start fresh
-    if st.session_state.get('calculation_ready'):
-        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
-        for key in list(st.session_state.keys()):
-            if key not in keys_to_keep:
-                del st.session_state[key]
-        # Ensure the fresh start includes the first camp
-        st.session_state.camps_count = 1
+if app_page == "Logout":
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
@@ -224,14 +218,7 @@ if not available_countries:
     st.error("No Excel files found.")
     st.stop()
 
-# --- 1. COUNTRY SELECTION ---
-selected_country = st.selectbox(
-    "1. Select Destination Country", 
-    options=available_countries, 
-    index=None,            # Ensures it starts empty
-    placeholder="Select a Country",
-    key="country_step_1"   # This key gets deleted by the Clear button
-)
+selected_country = st.selectbox("1. Select Destination Country", options=available_countries, index=None, placeholder="Select a Country")
 
 if selected_country:
     data = load_country_data(selected_country)
@@ -666,18 +653,9 @@ if st.session_state.get('calculation_ready'):
 
     st.divider()
     if st.button("🔄 Start New Quote (Clear All)"):
-        # 1. Define the keys we want to keep (Login info)
-        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
-        
-        # 2. Clear everything else from session state
-        for key in list(st.session_state.keys()):
-            if key not in keys_to_keep:
-                # This specifically removes park selections, 
-                # country selections, and calculated quote data
-                del st.session_state[key]
-        
-        # 3. Reset the camp count to 1 for the next user
-        st.session_state.camps_count = 1
-        
-        # 4. Force the app to rerun from the top
+        # Keep login/activity but wipe rest
+        keys_to_keep = ['logged_in', 'last_activity']
+        for k in list(st.session_state.keys()):
+            if k not in keys_to_keep:
+                del st.session_state[k]
         st.rerun()
