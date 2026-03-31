@@ -103,30 +103,33 @@ if app_page == "Search Database":
     db_results = search_quotes(search_query)
 
     if db_results:
-        # 1. Prepare Data with "Select" columns
         table_rows = []
-        for i, row in enumerate(db_results):
+        for row in db_results:
+            # Parse the config string to get the Tour Code
+            config_data = json.loads(row[4])
+            tour_code = config_data.get('code', 'N/A')
+            
             table_rows.append({
-                "#": i + 1,
+                "Tour Code": tour_code, # Replaces the # column
                 "Client (Country)": f"{row[1]} ({row[2]})",
                 "Date": row[3].split(" ")[0],
-                "📄 Word": False,  # Checkbox acting as a button
-                "🗑️ Del": False,   # Checkbox acting as a button
+                "📄 Word": False,
+                "🗑️ Del": False,
                 "db_id": row[0],
                 "config": row[4]
             })
         
         df = pd.DataFrame(table_rows)
 
-        # 2. Setup the Scrollable Table
+        # Update data_editor column_config
         edited_df = st.data_editor(
             df,
             column_config={
-                "db_id": None, "config": None,  # Hide background data
+                "db_id": None, "config": None,
                 "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
                 "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
             },
-            disabled=["#", "Client (Country)", "Date"], 
+            disabled=["Tour Code", "Client (Country)", "Date"], 
             hide_index=True,
             use_container_width=True,
             key="db_table"
