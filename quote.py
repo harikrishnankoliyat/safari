@@ -218,7 +218,14 @@ if not available_countries:
     st.error("No Excel files found.")
     st.stop()
 
-selected_country = st.selectbox("1. Select Destination Country", options=available_countries, index=None, placeholder="Select a Country")
+# --- 1. COUNTRY SELECTION ---
+selected_country = st.selectbox(
+    "1. Select Destination Country", 
+    options=available_countries, 
+    index=None,            # Ensures it starts empty
+    placeholder="Select a Country",
+    key="country_step_1"   # This key gets deleted by the Clear button
+)
 
 if selected_country:
     data = load_country_data(selected_country)
@@ -652,19 +659,19 @@ if st.session_state.get('calculation_ready'):
         st.download_button("📥 Download Quote", word_bytes, f"Quote_{client_name}.docx")
 
     st.divider()
+    st.divider()
     if st.button("🔄 Start New Quote (Clear All)"):
-        # 1. Define the keys we want to keep (Login info)
+        # 1. Define the keys we MUST keep to stay logged in
         keys_to_keep = ['logged_in', 'last_activity', 'is_master']
         
-        # 2. Clear everything else from session state
+        # 2. Delete every other key in the session state
+        # This removes country selection, park checkboxes, and all calculation data
         for key in list(st.session_state.keys()):
             if key not in keys_to_keep:
-                # This specifically removes park selections, 
-                # country selections, and calculated quote data
                 del st.session_state[key]
         
-        # 3. Reset the camp count to 1 for the next user
+        # 3. Explicitly reset the camp/lodge counter to 1
         st.session_state.camps_count = 1
         
-        # 4. Force the app to rerun from the top
+        # 4. Refresh the app to show the blank initial screen
         st.rerun()
