@@ -72,10 +72,11 @@ if app_page == "Logout":
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE (FINAL FIXED TABLE) ---
+# --- 4. DATABASE SEARCH PAGE ---
 if app_page == "Search Database":
     st.title("📂 Quote Database")
     search_query = st.text_input("Search Client Name")
-    from database import delete_quote, search_quotes
+    from database import delete_quote, search_quotes, DB_PATH # Imported DB_PATH for backup
     import json
 
     db_results = search_quotes(search_query)
@@ -97,7 +98,6 @@ if app_page == "Search Database":
         df = pd.DataFrame(table_rows)
 
         # 2. Setup the Scrollable Table
-        # We use use_container_width=True to ensure it fits the screen
         edited_df = st.data_editor(
             df,
             column_config={
@@ -105,14 +105,13 @@ if app_page == "Search Database":
                 "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
                 "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
             },
-            disabled=["#", "Client (Country)", "Date"], # Only checkboxes are clickable
+            disabled=["#", "Client (Country)", "Date"], 
             hide_index=True,
             use_container_width=True,
             key="db_table"
         )
 
         # 3. Handle Direct Clicks
-        # This logic runs immediately when a checkbox is clicked
         if st.session_state.db_table:
             edits = st.session_state.db_table.get("edited_rows", {})
             for row_idx, changes in edits.items():
@@ -122,21 +121,36 @@ if app_page == "Search Database":
                 if changes.get("📄 Word") == True:
                     saved_config = json.loads(real_data['config'])
                     word_bytes = generate_word_quotation(saved_config)
-                    st.download_button(f"📥 Click to Save #{real_data['#']}", 
-                                     word_bytes, 
-                                     file_name=f"Quote_{real_data['Client (Country)']}.docx",
-                                     type="primary")
+                    button_label = f"📥 Save Quote for {real_data['Client (Country)']}"
+                    st.download_button(
+                        label=button_label, 
+                        data=word_bytes, 
+                        file_name=f"Quote_{real_data['Client (Country)']}.docx",
+                        type="primary"
+                    )
                 
                 # IF DELETE CHECKED
                 if changes.get("🗑️ Del") == True:
-                    if st.button(f"⚠️ Confirm Delete #{real_data['#']}?"):
+                    if st.button(f"⚠️ Confirm Delete {real_data['Client (Country)']}?"):
                         delete_quote(real_data['db_id'])
                         st.rerun()
 
     else:
         st.info("No quotes found.")
-    st.stop()
 
+    # --- NEW: DATABASE MAINTENANCE (BACKUP) ---
+    if st.session_state.get("is_master"):
+        st.divider()
+        st.subheader("🛠️ Database Maintenance")
+        if os.path.exists(DB_PATH):
+            with open(DB_PATH, 'rb') as f:
+                st.download_button(
+                    label="📥 Download Database Backup (.db)",
+                    data=f,
+                    file_name=f"jaws_africa_backup_{datetime.now().strftime('%Y%m%d')}.db",
+                    mime="application/x-sqlite3"
+                )
+    st.stop()
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
