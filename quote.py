@@ -60,13 +60,20 @@ if "logged_in" not in st.session_state:
 check_timeout()
 
 # --- 3. NAVIGATION ---
+# --- 3. NAVIGATION ---
 st.sidebar.title("Menu")
 app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
 
-if app_page == "Logout":
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+# NEW: Logic to clear data when switching to "Create Quote"
+if app_page == "Create Quote":
+    # If a quote calculation was previously ready, clear it to start fresh
+    if st.session_state.get('calculation_ready'):
+        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
+        # Ensure the fresh start includes the first camp
+        st.session_state.camps_count = 1
 
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
