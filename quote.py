@@ -70,7 +70,7 @@ if "current_page" not in st.session_state:
     st.session_state.current_page = "Create Quote"
 
 # Use a temporary variable to detect the click
-choice = st.sidebar.radio("Navigate", menu_options)
+choice = st.sidebar.radio("Navigate", menu_options,label_visibility="collapsed")
 
 # If the user clicks "Create Quote", clear the data to start fresh
 if choice == "Create Quote" and st.session_state.current_page != "Create Quote":
