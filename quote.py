@@ -653,9 +653,18 @@ if st.session_state.get('calculation_ready'):
 
     st.divider()
     if st.button("🔄 Start New Quote (Clear All)"):
-        # Keep login/activity but wipe rest
-        keys_to_keep = ['logged_in', 'last_activity']
-        for k in list(st.session_state.keys()):
-            if k not in keys_to_keep:
-                del st.session_state[k]
+        # 1. Define the keys we want to keep (Login info)
+        keys_to_keep = ['logged_in', 'last_activity', 'is_master']
+        
+        # 2. Clear everything else from session state
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                # This specifically removes park selections, 
+                # country selections, and calculated quote data
+                del st.session_state[key]
+        
+        # 3. Reset the camp count to 1 for the next user
+        st.session_state.camps_count = 1
+        
+        # 4. Force the app to rerun from the top
         st.rerun()
