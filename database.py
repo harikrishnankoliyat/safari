@@ -47,9 +47,12 @@ def delete_quote(quote_id):
 def search_quotes(query):
     conn = get_connection()
     cur = conn.cursor()
-    # ILIKE is used for case-insensitive searching in Postgres
-    cur.execute("SELECT id, client_name, country, date_generated, config_json FROM quotes WHERE client_name ILIKE %s", 
-              ('%' + query + '%',))
+    # ILIKE searches both the client_name and the config_json (Tour Code)
+    cur.execute("""
+        SELECT id, client_name, country, date_generated, config_json 
+        FROM quotes 
+        WHERE client_name ILIKE %s OR config_json ILIKE %s
+    """, ('%' + query + '%', '%' + query + '%'))
     results = cur.fetchall()
     cur.close()
     conn.close()
