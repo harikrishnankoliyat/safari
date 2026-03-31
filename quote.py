@@ -154,7 +154,10 @@ if app_page == "Search Database":
                 # Delete Logic (Master Admin Only)
                 if st.session_state.get("is_master"):
                     if st.button("🗑️ Delete This Quote", type="secondary", use_container_width=True):
-                        delete_quote(real_data['db_id'])
+                        # FIX: Convert the numpy.int64 to a standard Python int
+                        quote_id_to_delete = int(real_data['db_id']) 
+                        delete_quote(quote_id_to_delete)
+                        
                         st.success("Quote deleted!")
                         st.rerun()
     else:
