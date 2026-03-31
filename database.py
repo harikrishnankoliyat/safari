@@ -3,11 +3,30 @@ import os
 from datetime import datetime
 import json
 
-# This checks if we are on Railway or running locally
-# Locally it uses the old filename, on Railway it uses the Volume path
-DB_PATH = "/app/data/safari_quotes.db" if os.path.exists("/app/data") else "safari_quotes.db"
+# 1. Define the persistent directory
+PERSISTENT_DIR = "/app/data"
+DB_NAME = "safari_quotes.db"
+
+# 2. Determine the path
+# If we are on Railway (the directory /app exists), use the volume
+if os.path.exists("/app"):
+    # Ensure the data directory actually exists inside the container
+    if not os.path.exists(PERSISTENT_DIR):
+        try:
+            os.makedirs(PERSISTENT_DIR, exist_ok=True)
+        except Exception:
+            pass # Fallback to local if permissions fail
+    
+    DB_PATH = os.path.join(PERSISTENT_DIR, DB_NAME)
+else:
+    # Local development path
+    DB_PATH = DB_NAME
 
 def init_db():
+    # Final check: if we are using the volume path, make sure the folder exists
+    if DB_PATH.startswith(PERSISTENT_DIR):
+        os.makedirs(PERSISTENT_DIR, exist_ok=True)
+        
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS quotes 
