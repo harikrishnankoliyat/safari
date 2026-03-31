@@ -61,13 +61,34 @@ check_timeout()
 
 # --- 3. NAVIGATION ---
 st.sidebar.title("Menu")
-app_page = st.sidebar.radio("Navigate", ["Create Quote", "Search Database", "Logout"])
+
+# Define the menu options
+menu_options = ["Create Quote", "Search Database", "Logout"]
+
+# Check if the selection is changing to "Create Quote"
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Create Quote"
+
+# Use a temporary variable to detect the click
+choice = st.sidebar.radio("Navigate", menu_options)
+
+# If the user clicks "Create Quote", clear the data to start fresh
+if choice == "Create Quote" and st.session_state.current_page != "Create Quote":
+    # Keep login/activity but wipe everything else
+    keys_to_keep = ['logged_in', 'is_master', 'last_activity']
+    for k in list(st.session_state.keys()):
+        if k not in keys_to_keep:
+            del st.session_state[k]
+    st.session_state.current_page = "Create Quote"
+    st.rerun()
+
+st.session_state.current_page = choice
+app_page = choice
 
 if app_page == "Logout":
     for key in list(st.session_state.keys()):
-        del st.session_state[key]
+        del key
     st.rerun()
-
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
