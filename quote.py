@@ -86,9 +86,10 @@ st.session_state.current_page = choice
 app_page = choice
 
 if app_page == "Logout":
+    # Correct way to clear session state:
     for key in list(st.session_state.keys()):
-        del key
-    st.rerun()
+        del st.session_state[key]  # This removes the actual data from the session
+    st.rerun()  # Forces the app to restart and show the login screen
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
 # --- 4. DATABASE SEARCH PAGE ---
