@@ -95,76 +95,69 @@ if app_page == "Logout":
 # --- 4. DATABASE SEARCH PAGE (FINAL FIXED TABLE) ---
 # --- 4. DATABASE SEARCH PAGE ---
 if app_page == "Search Database":
-    st.title("📂 Quote Database")
+    st.markdown('<p class="section-header">📂 Quote Database</p>', unsafe_allow_html=True)
     search_query = st.text_input("Search Client Name")
-    from database import delete_quote, search_quotes# Imported DB_PATH for backup
+    
+    from database import delete_quote, search_quotes
     import json
 
     db_results = search_quotes(search_query)
 
     if db_results:
+        # 1. Prepare Data
         table_rows = []
-        for row in db_results:
-            # Parse the config string to get the Tour Code
+        for i, row in enumerate(db_results):
+            # Parse config to get the Tour Code
             config_data = json.loads(row[4])
-            tour_code = config_data.get('code', 'N/A')
-            
             table_rows.append({
-                "Tour Code": tour_code, # Replaces the # column
+                "Tour Code": config_data.get('code', 'N/A'),
                 "Client (Country)": f"{row[1]} ({row[2]})",
                 "Date": row[3].split(" ")[0],
-                "📄 Word": False,
-                "🗑️ Del": False,
                 "db_id": row[0],
                 "config": row[4]
             })
         
         df = pd.DataFrame(table_rows)
 
-        # Update data_editor column_config
-        edited_df = st.data_editor(
-        df,
-        column_config={
-            "db_id": None, 
-            "config": None, 
-            "📄 Word": st.column_config.CheckboxColumn("Word", help="Check to Download"),
-            "🗑️ Del": st.column_config.CheckboxColumn("Del", help="Check to Delete") if st.session_state.get("is_master") else None
-        },
-        # Ensure these are set
-        disabled=["#", "Tour Code", "Client (Country)", "Date"], 
-        hide_index=True,
-        use_container_width=True,
-        key="db_table"
+        # 2. Display using st.dataframe (This removes the toolbar)
+        # We only show the first three columns to the user
+        event = st.dataframe(
+            df[["Tour Code", "Client (Country)", "Date"]],
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single_row"
         )
 
-        # 3. Handle Direct Clicks
-        if st.session_state.db_table:
-            edits = st.session_state.db_table.get("edited_rows", {})
-            for row_idx, changes in edits.items():
-                real_data = df.iloc[row_idx]
-                
-                # IF WORD CHECKED
-                if changes.get("📄 Word") == True:
-                    saved_config = json.loads(real_data['config'])
-                    word_bytes = generate_word_quotation(saved_config)
-                    button_label = f"📥 Save Quote for {real_data['Client (Country)']}"
-                    st.download_button(
-                        label=button_label, 
-                        data=word_bytes, 
-                        file_name=f"Quote_{real_data['Client (Country)']}.docx",
-                        type="primary"
-                    )
-                
-                # IF DELETE CHECKED
-                if changes.get("🗑️ Del") == True:
-                    if st.button(f"⚠️ Confirm Delete #{real_data['#']}?"):
+        # 3. Handle Actions based on Selection
+        if len(event.selection.rows) > 0:
+            selected_row_idx = event.selection.rows[0]
+            real_data = df.iloc[selected_row_idx]
+            
+            st.write(f"**Selected:** {real_data['Tour Code']}")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Word Generation Logic
+                saved_config = json.loads(real_data['config'])
+                word_bytes = generate_word_quotation(saved_config)
+                st.download_button(
+                    label=f"📥 Download Quote: {real_data['Client (Country)']}", 
+                    data=word_bytes, 
+                    file_name=f"Quote_{real_data['Client (Country)']}.docx",
+                    type="primary",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # Delete Logic (Master Admin Only)
+                if st.session_state.get("is_master"):
+                    if st.button("🗑️ Delete This Quote", type="secondary", use_container_width=True):
                         delete_quote(real_data['db_id'])
+                        st.success("Quote deleted!")
                         st.rerun()
-
     else:
         st.info("No quotes found.")
-
-    # --- NEW: DATABASE MAINTENANCE (BACKUP) ---
     
     st.stop()
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
