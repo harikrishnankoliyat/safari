@@ -140,6 +140,7 @@ if app_page == "Search Database":
 
     # --- NEW: DATABASE MAINTENANCE (BACKUP) ---
     
+    st.stop()
 # --- 5. MAIN GENERATOR PAGE (YOUR ORIGINAL 508 LINES START HERE) ---
 
 # --- CSS: RESPONSIVE UI ---
